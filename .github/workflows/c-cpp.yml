@@ -1,27 +1,26 @@
-name: Build
+name: C/C++ CI
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  release:
+    types: [ created ]  # Trigger when a new release is created
 
 jobs:
+  #############################################################################
+  # 1) Normal Build & Test Job (Push / PR)
+  #############################################################################
   build:
+    if: github.event_name != 'release'
     runs-on: macos-latest
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           brew install pkg-config opencv libimobiledevice libplist
-
-      - name: Print Version (verify issue #1)
-        run: |
-          ls /opt/homebrew/lib | grep imobiledevice || true
-          ls /opt/homebrew/lib | grep libplist || true
-          ls /opt/homebrew/lib | grep libopencv || true
 
       - name: Configure
         run: ./configure
@@ -34,3 +33,80 @@ jobs:
 
       - name: Dist Check
         run: make distcheck
+
+  #############################################################################
+  # 2) Release Job (Triggered by release creation)
+  #############################################################################
+  release:
+    if: github.event_name == 'release'
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install pkg-config opencv libimobiledevice libplist
+
+      - name: Configure
+        run: ./configure
+
+      - name: Build
+        run: make
+
+      - name: Test
+        run: make check
+
+      - name: Dist Check
+        run: make distcheck
+
+      - name: Prepare Homebrew Formula
+        id: formula
+        run: |
+          # Extract release tag from GitHub event
+          VERSION="${GITHUB_REF##*/}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          # Replace with the actual SHA-256 of the tarball
+          SHA256="REPLACE_WITH_ACTUAL_SHA256"
+
+          # Store the formula in a local file
+          cat <<EOF > ipurity.rb
+          class Ipurity < Formula
+            desc "NSFW content detector for iOS devices"
+            homepage "https://github.com/Agent-Hellboy/iPurity"
+            url "https://github.com/Agent-Hellboy/iPurity/releases/download/${VERSION}/ipurity-${VERSION}.tar.gz"
+            sha256 "${SHA256}"
+
+            depends_on "opencv"
+            depends_on "libimobiledevice"
+
+            def install
+              bin.install "afc_scanner" => "ipurity"
+            end
+
+            test do
+              system "\#{bin}/ipurity", "--version"
+            end
+          end
+          EOF
+
+      # Push Homebrew Formula
+      - name: Push Homebrew Formula
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ env.VERSION }}"
+          # Clone your Homebrew formula repository
+          git clone "https://github.com/Agent-Hellboy/agent-hellboy-homebrew-formula.git" formula-repo
+          cd formula-repo
+
+          # Copy the new formula
+          cp ../ipurity.rb ./ipurity.rb
+
+          # Commit & push
+          git config user.email "princekrroshan01@gmail.com"
+          git config user.name "Prince Roshan"
+          git add ipurity.rb
+          git commit -m "Add ipurity formula for release $VERSION"
+          git push origin main
