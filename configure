@@ -8,6 +8,7 @@
 #   - libplist (via a compile test)
 #
 # Exits with an error if any dependency is missing.
+# Also creates unversioned symlinks for libimobiledevice/libplist if needed.
 
 set -e  # Exit immediately on any error
 
@@ -88,8 +89,43 @@ rm -f "$TMPFILE"
 echo "libplist: found."
 
 ###############################################################################
-# 6. Success
+# 6. Create Symlinks for Versioned .dylib Files (if needed)
+###############################################################################
+SYMLINK_DIR="/opt/homebrew/lib"
+
+if [ -d "$SYMLINK_DIR" ]; then
+  echo "Checking for versioned libraries in $SYMLINK_DIR..."
+
+  pushd "$SYMLINK_DIR" >/dev/null || exit 1
+
+  # Symlink for libimobiledevice (e.g. libimobiledevice-1.0.dylib → libimobiledevice.dylib)
+  IMOBILE=$(ls libimobiledevice-*.dylib 2>/dev/null | head -n 1)
+  if [[ -n "$IMOBILE" ]]; then
+    echo "Found $IMOBILE. Creating symlink libimobiledevice.dylib → $IMOBILE"
+    ln -sf "$IMOBILE" libimobiledevice.dylib
+  fi
+
+  # Symlink for libplist (non-++), e.g. libplist-2.0.dylib → libplist.dylib
+  PLIST=$(ls libplist-*.dylib 2>/dev/null | grep -v '++' | head -n 1)
+  if [[ -n "$PLIST" ]]; then
+    echo "Found $PLIST. Creating symlink libplist.dylib → $PLIST"
+    ln -sf "$PLIST" libplist.dylib
+  fi
+
+  # Symlink for libplist++ (C++ version), e.g. libplist++-2.0.dylib → libplist++.dylib
+  PLISTPP=$(ls libplist++-*.dylib 2>/dev/null | head -n 1)
+  if [[ -n "$PLISTPP" ]]; then
+    echo "Found $PLISTPP. Creating symlink libplist++.dylib → $PLISTPP"
+    ln -sf "$PLISTPP" libplist++.dylib
+  fi
+
+  popd >/dev/null
+fi
+
+###############################################################################
+# 7. Success
 ###############################################################################
 echo "All checks passed for Apple Silicon macOS."
+echo "Unversioned symlinks created (if needed)."
 echo "You can now run 'make' or 'make all'."
 exit 0
