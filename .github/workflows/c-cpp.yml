@@ -17,42 +17,11 @@ jobs:
         run: |
           brew install pkg-config opencv libimobiledevice libplist
 
-name: Build
-
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-jobs:
-  build:
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
+      - name: Print Version (verify issue #1)
         run: |
-          brew install pkg-config opencv libimobiledevice libplist
-          
-      - name: Print Version # verify issue 1
-        run: |
-          ls /opt/homebrew/lib | grep imobiledevice
-          ls /opt/homebrew/lib | grep libplist
-          ls /opt/homebrew/lib | grep libopencv
-
-      - name: Configure
-        run: ./configure
-
-      - name: Build
-        run: make
-
-      - name: Test
-        run: make check
-
-      - name: Dist Check
-        run: make distcheck
+          ls /opt/homebrew/lib | grep imobiledevice || true
+          ls /opt/homebrew/lib | grep libplist || true
+          ls /opt/homebrew/lib | grep libopencv || true
 
       - name: Configure
         run: ./configure
