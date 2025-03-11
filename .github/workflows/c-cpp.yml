@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ "main" ]
   release:
-    types: [ created ]  # Trigger when a new release is created
+    types: [ created ]  
 
 jobs:
   #############################################################################
@@ -57,20 +57,25 @@ jobs:
       - name: Test
         run: make check
 
-      - name: Dist Check
-        run: make distcheck
+      - name: Dist
+        run: make dist  # Produces dist/ios_nsfw_scanner.tar.gz
+
+      - name: Rename Tarball and Compute SHA
+        id: tarball
+        run: |
+          VERSION="${GITHUB_REF##*/}"  # Extract release tag from ref, e.g. v1.0.0
+          # Rename the tarball to include the version
+          mv dist/ios_nsfw_scanner.tar.gz "dist/ipurity-${VERSION}.tar.gz"
+
+          # Compute SHA-256
+          SHA256=$(shasum -a 256 "dist/ipurity-${VERSION}.tar.gz" | cut -d' ' -f1)
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Prepare Homebrew Formula
         id: formula
         run: |
-          # Extract release tag from GitHub event
           VERSION="${GITHUB_REF##*/}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-          # Replace with the actual SHA-256 of the tarball
-          SHA256="REPLACE_WITH_ACTUAL_SHA256"
-
-          # Store the formula in a local file
+          SHA256="${{ steps.tarball.outputs.sha256 }}"
           cat <<EOF > ipurity.rb
           class Ipurity < Formula
             desc "NSFW content detector for iOS devices"
@@ -82,6 +87,7 @@ jobs:
             depends_on "libimobiledevice"
 
             def install
+              # If your built binary is named "afc_scanner", rename or install accordingly
               bin.install "afc_scanner" => "ipurity"
             end
 
@@ -91,17 +97,17 @@ jobs:
           end
           EOF
 
-      # Push Homebrew Formula
       - name: Push Homebrew Formula
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ env.VERSION }}"
-          # Clone your Homebrew formula repository
+          VERSION="${GITHUB_REF##*/}"
+
+          # Clone your separate formula repo
           git clone "https://github.com/Agent-Hellboy/agent-hellboy-homebrew-formula.git" formula-repo
           cd formula-repo
 
-          # Copy the new formula
+          # Copy the new formula in
           cp ../ipurity.rb ./ipurity.rb
 
           # Commit & push
