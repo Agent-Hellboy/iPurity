@@ -15,7 +15,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew update
           brew install pkg-config opencv libimobiledevice libplist
 
       - name: Configure
