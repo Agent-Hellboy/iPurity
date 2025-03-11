@@ -1,17 +1,12 @@
-name: C/C++ CI
+name: Build
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  release:
-    types: [ created ]  
 
 jobs:
-  #############################################################################
-  # 1) Normal Build & Test Job (Push / PR)
-  #############################################################################
   build:
     if: github.event_name != 'release'
     runs-on: macos-latest
@@ -34,85 +29,3 @@ jobs:
       - name: Dist Check
         run: make distcheck
 
-  #############################################################################
-  # 2) Release Job (Triggered by release creation)
-  #############################################################################
-  release:
-    if: github.event_name == 'release'
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          brew install pkg-config opencv libimobiledevice libplist
-
-      - name: Configure
-        run: ./configure
-
-      - name: Build
-        run: make
-
-      - name: Test
-        run: make check
-
-      - name: Dist
-        run: make dist  # Produces dist/ios_nsfw_scanner.tar.gz
-
-      - name: Rename Tarball and Compute SHA
-        id: tarball
-        run: |
-          VERSION="${GITHUB_REF##*/}"  # Extract release tag from ref, e.g. v1.0.0
-          # Rename the tarball to include the version
-          mv dist/ios_nsfw_scanner.tar.gz "dist/ipurity-${VERSION}.tar.gz"
-
-          # Compute SHA-256
-          SHA256=$(shasum -a 256 "dist/ipurity-${VERSION}.tar.gz" | cut -d' ' -f1)
-          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
-
-      - name: Prepare Homebrew Formula
-        id: formula
-        run: |
-          VERSION="${GITHUB_REF##*/}"
-          SHA256="${{ steps.tarball.outputs.sha256 }}"
-          cat <<EOF > ipurity.rb
-          class Ipurity < Formula
-            desc "NSFW content detector for iOS devices"
-            homepage "https://github.com/Agent-Hellboy/iPurity"
-            url "https://github.com/Agent-Hellboy/iPurity/releases/download/${VERSION}/ipurity-${VERSION}.tar.gz"
-            sha256 "${SHA256}"
-
-            depends_on "opencv"
-            depends_on "libimobiledevice"
-
-            def install
-              # If your built binary is named "afc_scanner", rename or install accordingly
-              bin.install "afc_scanner" => "ipurity"
-            end
-
-            test do
-              system "\#{bin}/ipurity", "--version"
-            end
-          end
-          EOF
-
-      - name: Push Homebrew Formula
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${GITHUB_REF##*/}"
-
-          # Clone your separate formula repo
-          git clone "https://github.com/Agent-Hellboy/agent-hellboy-homebrew-formula.git" formula-repo
-          cd formula-repo
-
-          # Copy the new formula in
-          cp ../ipurity.rb ./ipurity.rb
-
-          # Commit & push
-          git config user.email "princekrroshan01@gmail.com"
-          git config user.name "Prince Roshan"
-          git add ipurity.rb
-          git commit -m "Add ipurity formula for release $VERSION"
-          git push origin main
