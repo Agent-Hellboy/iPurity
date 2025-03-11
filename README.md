@@ -13,7 +13,7 @@ Note: Tested only on Apple Silicon Mac
 - libimobiledevice
 - OpenCV    
 - CMake
-- lplist
+- plist
 
 ## Installation
 
