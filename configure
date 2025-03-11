@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+#
+# A simple "configure" script for Apple Silicon macOS
+# that checks for required dependencies:
+#   - pkg-config
+#   - OpenCV (via pkg-config)
+#   - libimobiledevice (via a compile test)
+#   - libplist (via a compile test)
+#
+# Exits with an error if any dependency is missing.
+
+set -e  # Exit immediately on any error
+
+echo "Running configure for Apple Silicon macOS..."
+
+###############################################################################
+# 1. Check Apple Silicon (arm64)
+###############################################################################
+ARCH=$(uname -m)
+if [ "$ARCH" != "arm64" ]; then
+  echo "Error: This configure script is for Apple Silicon (arm64) only."
+  echo "Detected architecture: $ARCH"
+  exit 1
+fi
+echo "Architecture: $ARCH (Apple Silicon)"
+
+###############################################################################
+# 2. Check for pkg-config
+###############################################################################
+if ! command -v pkg-config &>/dev/null; then
+  echo "Error: 'pkg-config' not found. Please install it (e.g., brew install pkg-config)."
+  exit 1
+fi
+echo "pkg-config: found."
+
+###############################################################################
+# 3. Check for OpenCV via pkg-config
+###############################################################################
+# We try opencv4 first or fallback to opencv.
+if ! pkg-config --exists opencv4 && ! pkg-config --exists opencv; then
+  echo "Error: OpenCV not found (pkg-config check failed)."
+  echo "       Install via Homebrew: brew install opencv"
+  exit 1
+fi
+echo "OpenCV: found."
+
+###############################################################################
+# 4. Check for libimobiledevice
+###############################################################################
+# Many times, libimobiledevice doesn't ship a pkg-config file, so we do a compile test.
+TMPFILE=$(mktemp /tmp/check_imobile.XXXXXX.cpp)
+cat << EOF > "$TMPFILE"
+#include <libimobiledevice/libimobiledevice.h>
+int main() { return 0; }
+EOF
+
+# Attempt to compile it. For Apple Silicon, Homebrew is usually /opt/homebrew/include
+if ! g++ -I/opt/homebrew/include -c "$TMPFILE" -o /dev/null 2>/dev/null; then
+  echo "Error: Could not compile a test program with libimobiledevice."
+  echo "       Make sure libimobiledevice is installed: brew install libimobiledevice"
+  rm -f "$TMPFILE"
+  exit 1
+fi
+rm -f "$TMPFILE"
+echo "libimobiledevice: found."
+
+###############################################################################
+# 5. Check for libplist
+###############################################################################
+# We'll do a similar compile test. The main header is <plist/plist.h>.
+TMPFILE=$(mktemp /tmp/check_plist.XXXXXX.cpp)
+cat << EOF > "$TMPFILE"
+#include <plist/plist.h>
+int main() {
+    plist_t p = plist_new_dict();
+    plist_free(p);
+    return 0;
+}
+EOF
+
+if ! g++ -I/opt/homebrew/include -c "$TMPFILE" -o /dev/null 2>/dev/null; then
+  echo "Error: Could not compile a test program with libplist."
+  echo "       Make sure libplist is installed: brew install libplist"
+  rm -f "$TMPFILE"
+  exit 1
+fi
+rm -f "$TMPFILE"
+echo "libplist: found."
+
+###############################################################################
+# 6. Success
+###############################################################################
+echo "All checks passed for Apple Silicon macOS."
+echo "You can now run 'make' or 'make all'."
+exit 0
