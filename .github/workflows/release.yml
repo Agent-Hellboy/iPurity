@@ -86,8 +86,8 @@ jobs:
         run: |
           VERSION="${GITHUB_REF##*/}"
       
-          # Clone your separate formula repo
-          git clone "https://$PERSONAL_TOKEN:@github.com/Agent-Hellboy/agent-hellboy-homebrew-formula.git" formula-repo
+          # Clone your separate formula repo with token-based auth
+          git clone "https://x-access-token:${PERSONAL_TOKEN}@github.com/Agent-Hellboy/agent-hellboy-homebrew-formula.git" formula-repo
           cd formula-repo
       
           # Copy the new formula in
@@ -98,6 +98,10 @@ jobs:
           git config user.name "Prince Roshan"
           git add ipurity.rb
           git commit -m "Add ipurity formula for release $VERSION"
+      
+          # Push
+          git push origin main
+
       
           # Push
           git push origin main
