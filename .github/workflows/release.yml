@@ -44,14 +44,15 @@ jobs:
           SHA256=$(shasum -a 256 "dist/ipurity-${VERSION}.tar.gz" | cut -d' ' -f1)
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release and Upload Asset
+      - name: Upload Asset to Existing Release
         run: |
-          VERSION="${GITHUB_REF##*/}"
-          gh release create "$VERSION" "dist/ipurity-${VERSION}.tar.gz" \
-            --title "Release $VERSION" \
-            --notes "Automated release for tag $VERSION"
+          VERSION="${GITHUB_REF##*/}"  # e.g. "v1.0.0"
+          # The release must already exist with this tag.
+          # --clobber overwrites the asset if it already exists.
+          gh release upload "$VERSION" "dist/ipurity-${VERSION}.tar.gz" --clobber
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
 
       - name: Prepare Homebrew Formula
         id: formula
