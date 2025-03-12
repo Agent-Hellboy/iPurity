@@ -25,7 +25,7 @@ make
 ## Usage
 
 ```bash 
-./ios_nsfw_scanner
+./ipurity
 ```
 
 ## License  

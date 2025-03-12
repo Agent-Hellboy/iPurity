@@ -13,7 +13,7 @@ IMOBILEDEVICE_LIBS = -L/opt/homebrew/lib -limobiledevice -lplist
 ###############################################################################
 # Targets
 ###############################################################################
-TARGET = ios_nsfw_scanner
+TARGET = ipurity
 OBJS = src/afc_scanner.o src/nsfw_detector.o
 
 ###############################################################################
