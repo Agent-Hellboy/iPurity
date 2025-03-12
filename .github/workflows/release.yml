@@ -38,7 +38,7 @@ jobs:
           VERSION="${GITHUB_REF##*/}"
 
           # Rename the tarball to match your formula naming
-          mv dist/ios_nsfw_scanner.tar.gz "dist/ipurity-${VERSION}.tar.gz"
+          mv dist/ipurity.tar.gz "dist/ipurity-${VERSION}.tar.gz"
 
           # Compute SHA-256
           SHA256=$(shasum -a 256 "dist/ipurity-${VERSION}.tar.gz" | cut -d' ' -f1)
