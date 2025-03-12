@@ -82,12 +82,12 @@ jobs:
 
       - name: Push Homebrew Formula
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PERSONAL_TOKEN: ${{ secrets.HOME_BREW_TOKEN }}
         run: |
           VERSION="${GITHUB_REF##*/}"
       
           # Clone your separate formula repo
-          git clone "https://github.com/Agent-Hellboy/agent-hellboy-homebrew-formula.git" formula-repo
+          git clone "https://$PERSONAL_TOKEN:@github.com/Agent-Hellboy/agent-hellboy-homebrew-formula.git" formula-repo
           cd formula-repo
       
           # Copy the new formula in
@@ -99,10 +99,7 @@ jobs:
           git add ipurity.rb
           git commit -m "Add ipurity formula for release $VERSION"
       
-          # Set up a local credential file
-          git config credential.helper store
-          echo "https://x-access-token:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
-      
-          # Now push
+          # Push
           git push origin main
+
       
