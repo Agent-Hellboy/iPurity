@@ -6,6 +6,7 @@
 #   - OpenCV (via pkg-config)
 #   - libimobiledevice (via a compile test)
 #   - libplist (via a compile test)
+#   - Google Logging (glog) (via a compile test)
 #
 # Exits with an error if any dependency is missing.
 # Also creates unversioned symlinks for libimobiledevice/libplist if needed.
@@ -89,7 +90,29 @@ rm -f "$TMPFILE"
 echo "libplist: found."
 
 ###############################################################################
-# 6. Create Symlinks for Versioned .dylib Files (if needed)
+# 6. Check for Google Logging (glog)
+###############################################################################
+TMPFILE=$(mktemp /tmp/check_glog.XXXXXX.cpp)
+cat << EOF > "$TMPFILE"
+#include <glog/logging.h>
+int main(int argc, char* argv[]) {
+    google::InitGoogleLogging(argv[0]);
+    LOG(INFO) << "glog is working!";
+    return 0;
+}
+EOF
+
+if ! g++ -I/opt/homebrew/include -c "$TMPFILE" -o /dev/null 2>/dev/null; then
+  echo "Error: Could not compile a test program with Google Logging (glog)."
+  echo "       Make sure glog is installed: brew install glog"
+  rm -f "$TMPFILE"
+  exit 1
+fi
+rm -f "$TMPFILE"
+echo "Google Logging (glog): found."
+
+###############################################################################
+# 7. Create Symlinks for Versioned .dylib Files (if needed)
 ###############################################################################
 SYMLINK_DIR="/opt/homebrew/lib"
 
@@ -123,7 +146,7 @@ if [ -d "$SYMLINK_DIR" ]; then
 fi
 
 ###############################################################################
-# 7. Success
+# 8. Success
 ###############################################################################
 echo "All checks passed for Apple Silicon macOS."
 echo "Unversioned symlinks created (if needed)."

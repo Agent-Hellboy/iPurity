@@ -9,6 +9,7 @@ CXXFLAGS = -std=c++11 -Wall -Wextra \
 
 OPENCV_LIBS = `pkg-config --libs opencv4 2>/dev/null || pkg-config --libs opencv`
 IMOBILEDEVICE_LIBS = -L/opt/homebrew/lib -limobiledevice -lplist
+GLOG_LIBS = -lglog
 
 ###############################################################################
 # Targets
@@ -22,7 +23,7 @@ OBJS = src/afc_scanner.o src/nsfw_detector.o
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(OPENCV_LIBS) $(IMOBILEDEVICE_LIBS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(OPENCV_LIBS) $(IMOBILEDEVICE_LIBS) $(GLOG_LIBS)
 
 # Compile afc_scanner.cpp
 src/afc_scanner.o: src/afc_scanner.cpp
@@ -43,12 +44,10 @@ configure:
 	@echo "All dependencies are assumed to be in place for Apple Silicon."
 
 # 2. "check" target
-#    In a real project, you might run unit tests here.
 check:
 	@echo "Running 'make check' (no tests implemented)."
 
 # 3. "dist" target
-#    Creates a tarball of your source code.
 dist:
 	@echo "Creating a distribution tarball..."
 	@mkdir -p dist
@@ -58,7 +57,6 @@ dist:
 	@echo "Created dist/$(TARGET).tar.gz"
 
 # 4. "distcheck" target
-#    Typically unpacks the tarball, builds, and runs tests. We do a dummy approach.
 distcheck: dist
 	@echo "Running distcheck (dummy)."
 	@cd dist && tar -xzf $(TARGET).tar.gz

@@ -15,9 +15,33 @@ jobs:
       - name: Install dependencies
         run: |
           brew install pkg-config opencv libimobiledevice libplist
+          # Install cpplint via pip if not available via brew
+          pip3 install cpplint
+          # Install makefile-lint (if available via brew or npm, adjust as needed)
+          npm install -g makefile-lint
+          # Install static analysis tools
+          brew install cppcheck clang-tidy
 
       - name: Configure
         run: ./configure
+
+      - name: Lint C++ Code with cpplint
+        run: |
+          cpplint --recursive include src
+
+      - name: Lint Makefiles with makefile-lint
+        run: |
+          makefile-lint
+
+      - name: Run Static Analysis with cppcheck
+        run: |
+          cppcheck --enable=warning,performance,portability --error-exitcode=1 --inline-suppr --std=c++11 include src
+
+      - name: Run clang-tidy on source files
+        run: |
+          for file in src/*.cpp; do
+            clang-tidy "$file" -- -Iinclude;
+          done
 
       - name: Build
         run: make
@@ -27,4 +51,3 @@ jobs:
 
       - name: Dist Check
         run: make distcheck
-
