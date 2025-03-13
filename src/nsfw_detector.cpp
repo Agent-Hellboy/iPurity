@@ -22,7 +22,7 @@ static bool isSkinPixel(const cv::Vec3b& ycrcb)
     return false;
 }
 
-bool naiveNSFWCheck(const std::string& imagePath, float skinThreshold)
+bool naiveNSFWCheck(const std::string& imagePath, float skinThreshold )
 {
     // 1. Load the image in BGR format
     cv::Mat imgBGR = cv::imread(imagePath, cv::IMREAD_COLOR);

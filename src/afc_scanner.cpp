@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <chrono>
+#include <iomanip>
 
 // libimobiledevice
 #include <libimobiledevice/libimobiledevice.h>
@@ -16,6 +18,28 @@
 const char* COLOR_GREEN = "\033[32m";
 const char* COLOR_RED   = "\033[31m";
 const char* COLOR_RESET = "\033[0m";
+
+// Structure to hold scan statistics
+struct ScanStats {
+    int totalFiles = 0;
+    int nsfwFiles  = 0;
+    int safeFiles  = 0;
+};
+
+// Check if the file extension indicates an image file.
+bool is_image_file(const std::string &filePath) {
+    size_t dotPos = filePath.find_last_of('.');
+    if (dotPos == std::string::npos) return false;
+    
+    std::string ext = filePath.substr(dotPos);
+    // Convert extension to lowercase
+    for (auto &c : ext) c = tolower(c);
+    
+    return (ext == ".jpg" || ext == ".jpeg" ||
+            ext == ".png" || ext == ".gif"  ||
+            ext == ".bmp" || ext == ".tiff" ||
+            ext == ".webp"); // Add other extensions as needed.
+}
 
 /**
  * Example function to download a file from iPhone (via AFC)
@@ -54,16 +78,14 @@ static bool download_file(afc_client_t afc, const char* remotePath, const char* 
     return true;
 }
 
-static void scan_directory(afc_client_t afc, const char *path);
+static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats);
 
 /**
  * Recursively list files and directories on the iPhone via AFC.
- * In your real code, you'd:
- *   1) Check if it's an image/video (by extension).
- *   2) Download the file to a local path.
- *   3) Run naiveNSFWCheck(...) on the downloaded file.
+ * For each image file, download the file and run the NSFW check.
+ * Statistics are updated in the ScanStats structure.
  */
-static void scan_directory(afc_client_t afc, const char *path) {
+static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats) {
     char **dirList = NULL;
     afc_error_t err = afc_read_directory(afc, path, &dirList);
     if (err != AFC_E_SUCCESS) {
@@ -92,30 +114,27 @@ static void scan_directory(afc_client_t afc, const char *path) {
                     break;
                 }
             }
-
             afc_dictionary_free(fileInfo);
 
             if (isDir) {
-                scan_directory(afc, fullPath);
+                scan_directory(afc, fullPath, stats);
             } else {
                 std::string filePathStr(fullPath);
-                if (filePathStr.size() > 4) {
-                    std::string ext = filePathStr.substr(filePathStr.size() - 4);
-                    for (auto &c : ext) c = tolower(c);
-
-                    if (ext == ".jpg" || ext == ".png") {
-                        std::cout << "Found image file: " << fullPath << std::endl;
-                        std::string localFile = "/tmp/ios_" + filePathStr.substr(filePathStr.find_last_of("/") + 1);
-                        if (download_file(afc, fullPath, localFile.c_str())) {
-                            bool isNSFW = naiveNSFWCheck(localFile);
-                            if (isNSFW) {
-                                std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
-                            } else {
-                                std::cout << COLOR_GREEN << "[SAFE] " << localFile << COLOR_RESET << std::endl;
-                            }
-                            // Optionally remove the local file if you don't need it:
-                            // remove(localFile.c_str());
+                if (is_image_file(filePathStr)) {
+                    stats.totalFiles++;
+                    std::cout << "Found image file: " << fullPath << std::endl;
+                    std::string localFile = "/tmp/ios_" + filePathStr.substr(filePathStr.find_last_of("/") + 1);
+                    if (download_file(afc, fullPath, localFile.c_str())) {
+                        bool isNSFW = naiveNSFWCheck(localFile);
+                        if (isNSFW) {
+                            stats.nsfwFiles++;
+                            std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
+                        } else {
+                            stats.safeFiles++;
+                            std::cout << COLOR_GREEN << "[SAFE] " << localFile << COLOR_RESET << std::endl;
                         }
+                        // Optionally remove the local file if you don't need it:
+                        // remove(localFile.c_str());
                     }
                 }
             }
@@ -132,6 +151,7 @@ static void scan_directory(afc_client_t afc, const char *path) {
  * 3. Start the AFC service.
  * 4. Recursively scan a directory (e.g., /DCIM) to find files.
  * 5. Download each image and run naiveNSFWCheck on it.
+ * 6. Print a final report of the scan statistics.
  */
 int main(int argc, char *argv[]) {
     idevice_t device = NULL;
@@ -167,16 +187,31 @@ int main(int argc, char *argv[]) {
 
     lockdownd_service_descriptor_free(service);
 
-    // For demo, we set a default "skin threshold"
-    float skinThreshold = 0.3f;
+    // Start timer for the scan
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     const char *rootPath = "/DCIM";
     std::cout << "Scanning directory: " << rootPath << std::endl;
-    scan_directory(afc, rootPath);
 
+    ScanStats stats;
+    scan_directory(afc, rootPath, stats);
+
+    // End timer for the scan
+    auto endTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = endTime - startTime;
+
+    // Cleanup
     afc_client_free(afc);
     lockdownd_client_free(client);
     idevice_free(device);
+
+    // Print final report in tabular format
+    std::cout << "\n------------------- Scan Report -------------------\n";
+    std::cout << std::left << std::setw(35) << "Total Image Files Scanned:" << stats.totalFiles << "\n";
+    std::cout << std::left << std::setw(35) << "NSFW Files Detected:" << stats.nsfwFiles << "\n";
+    std::cout << std::left << std::setw(35) << "Safe Files Detected:" << stats.safeFiles << "\n";
+    std::cout << std::left << std::setw(35) << "Time Taken (seconds):" << elapsed.count() << "\n";
+    std::cout << "-----------------------------------------------------\n";
 
     return 0;
 }
