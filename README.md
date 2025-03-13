@@ -6,9 +6,15 @@ iPurity is a simple NSFW (Not Safe For Work) detector for iOS devices.
 
 It utilizes AFC (Apple File Conduit) to list and open each media file and OpenCV to detect nsfw images. 
 
-No one has the time to manually check all the images on their phone before handing it over to a younger sibling. Connect your phone via USB, grant trust to your device, and run the program to scan and delete unwanted content before passing it on.
-
 Note: Tested only on Apple Silicon Mac
+
+## Why did I make this?
+- The program was created because one of my younger siblings accidentally encountered NSFW content.
+- There is often no time to manually check all images on their phone before passing it to a younger sibling.
+- This program aims to assist in identifying potentially inappropriate content.
+
+## Disclaimer
+- There may be a significant number of false negatives; however, it can help reduce the dataset to scan by approximately 5-10%.
 
 ## Prerequisites
 
