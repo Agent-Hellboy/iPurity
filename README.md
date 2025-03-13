@@ -23,7 +23,7 @@ Note: Tested only on Apple Silicon Mac
 You can install iPurity from your custom Homebrew tap:
 
 ```bash
-brew tap Agent-Hellboy/agent-hellboy-formula
+brew tap Agent-Hellboy/homebrew-agent-hellboy-formula
 brew install ipurity
 ```
 
