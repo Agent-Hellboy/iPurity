@@ -18,7 +18,7 @@ Note: Tested only on Apple Silicon Mac
 
 ## Installation
 
-### Option 1: Homebrew (macOS)
+### Option 1: Homebrew (Broken)
 
 You can install iPurity from your custom Homebrew tap:
 
