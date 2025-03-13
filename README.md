@@ -14,7 +14,7 @@ Note: Tested only on Apple Silicon Mac
 - This program aims to assist in identifying potentially inappropriate content.
 
 ## Disclaimer
-- There may be a significant number of false negatives; however, it can help reduce the dataset to scan by approximately 5-10%.
+- There may be many false negatives; however, it can help reduce the dataset to scan by approximately 90-95%.
 
 ## Prerequisites
 
