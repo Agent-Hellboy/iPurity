@@ -32,6 +32,7 @@ struct ScanStats {
     int totalFiles = 0;
     int nsfwFiles  = 0;
     int safeFiles  = 0;
+    std::vector<std::string> nsfwFilesList;
 };
 
 // Check if the file extension indicates an image file.
@@ -163,6 +164,7 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
                                     std::lock_guard<std::mutex> coutLock(g_coutMutex);
                                     stats.nsfwFiles++;
                                     std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
+                                    stats.nsfwFilesList.push_back(localFile);
                                 } else {
                                     std::lock_guard<std::mutex> coutLock(g_coutMutex);
                                     stats.safeFiles++;
@@ -255,7 +257,7 @@ int main(int argc, char *argv[]) {
     std::cout << std::left << std::setw(35) << "NSFW Files Detected:" << stats.nsfwFiles << "\n";
     std::cout << std::left << std::setw(35) << "Safe Files Detected:" << stats.safeFiles << "\n";
     std::cout << std::left << std::setw(35) << "Time Taken (seconds):" << elapsed.count() << "\n";
+    std::cout << std::left << std::setw(35) << "NSFW Files List:" << stats.nsfwFilesList << "\n";
     std::cout << "-----------------------------------------------------\n";
-
     return 0;
 }

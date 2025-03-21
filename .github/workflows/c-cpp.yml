@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        sanitizer: [ address, thread ]
     steps:
       - uses: actions/checkout@v4
 
@@ -16,8 +19,16 @@ jobs:
         run: |
           brew install pkg-config opencv libimobiledevice libplist
 
-      - name: Configure
-        run: ./configure
+      - name: Configure with Sanitizer
+        run: |
+          if [ "${{ matrix.sanitizer }}" = "address" ]; then
+            export CFLAGS="-fsanitize=address -fno-omit-frame-pointer"
+            export CXXFLAGS="-fsanitize=address -fno-omit-frame-pointer"
+          elif [ "${{ matrix.sanitizer }}" = "thread" ]; then
+            export CFLAGS="-fsanitize=thread -fno-omit-frame-pointer"
+            export CXXFLAGS="-fsanitize=thread -fno-omit-frame-pointer"
+          fi
+          ./configure
 
       - name: Build
         run: make
@@ -27,4 +38,3 @@ jobs:
 
       - name: Dist Check
         run: make distcheck
-
