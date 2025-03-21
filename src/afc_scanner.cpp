@@ -9,7 +9,6 @@
 #include <mutex>
 #include <vector>
 
-
 // libimobiledevice
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
@@ -25,13 +24,13 @@ const char* COLOR_RESET = "\033[0m";
 
 // Global mutexes for protecting shared state and std::cout:
 static std::mutex g_statsMutex;
-static std::mutex g_coutMutex;
 
 // Structure to hold scan statistics
 struct ScanStats {
     int totalFiles = 0;
     int nsfwFiles  = 0;
     int safeFiles  = 0;
+    int errorFiles = 0; // New counter for files that could not be NSFW scanned
     std::vector<std::string> nsfwFilesList;
 };
 
@@ -99,7 +98,6 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
     char **dirList = nullptr;
     afc_error_t err = afc_read_directory(afc, path, &dirList);
     if (err != AFC_E_SUCCESS) {
-        std::lock_guard<std::mutex> coutLock(g_coutMutex);
         std::cerr << "Error reading directory " << path
                   << " (afc error " << err << ")" << std::endl;
         return;
@@ -138,38 +136,39 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
             if (isDir) {
                 // Launch a new thread to scan the subdirectory.
                 threads.emplace_back([afc, pathStr, &stats]() {
-                    // Calling scan_directory recursively with the copied path.
                     scan_directory(afc, pathStr.c_str(), stats);
                 });
             } else {
                 if (is_image_file(pathStr)) {
                     // Launch a new thread to handle the file download and NSFW check.
                     threads.emplace_back([afc, pathStr, &stats]() {
-                        // Update the total files count.
                         {
                             std::lock_guard<std::mutex> lock(g_statsMutex);
                             stats.totalFiles++;
                         }
                         {
-                            std::lock_guard<std::mutex> coutLock(g_coutMutex);
                             std::cout << "Found image file: " << pathStr << std::endl;
                         }
                         // Construct a local file path.
                         std::string localFile = "/tmp/ios_" + pathStr.substr(pathStr.find_last_of("/") + 1);
                         if (download_file(afc, pathStr.c_str(), localFile.c_str())) {
-                            bool isNSFW = naiveNSFWCheck(localFile);
-                            {
-                                std::lock_guard<std::mutex> lock(g_statsMutex);
-                                if (isNSFW) {
-                                    std::lock_guard<std::mutex> coutLock(g_coutMutex);
-                                    stats.nsfwFiles++;
-                                    std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
-                                    stats.nsfwFilesList.push_back(localFile);
-                                } else {
-                                    std::lock_guard<std::mutex> coutLock(g_coutMutex);
-                                    stats.safeFiles++;
-                                    std::cout << COLOR_GREEN << "[SAFE] " << localFile << COLOR_RESET << std::endl;
+                            try {
+                                bool isNSFW = naiveNSFWCheck(localFile);
+                                {
+                                    std::lock_guard<std::mutex> lock(g_statsMutex);
+                                    if (isNSFW) {
+                                        stats.nsfwFiles++;
+                                        stats.nsfwFilesList.push_back(localFile);
+                                        std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
+                                    } else {
+                                        stats.safeFiles++;
+                                        std::cout << COLOR_GREEN << "[SAFE] " << localFile << COLOR_RESET << std::endl;
+                                    }
                                 }
+                            } catch (...) {
+                                std::lock_guard<std::mutex> lock(g_statsMutex);
+                                stats.errorFiles++;
+                                std::cerr << "[ERROR] NSFW scan failed for " << localFile << std::endl;
                             }
                             // Optionally remove the local file if not needed:
                             // remove(localFile.c_str());
@@ -251,13 +250,25 @@ int main(int argc, char *argv[]) {
     lockdownd_client_free(client);
     idevice_free(device);
 
+    // Convert elapsed time to HH:MM:SS
+    int total_seconds = static_cast<int>(elapsed.count());
+    int hours = total_seconds / 3600;
+    int minutes = (total_seconds % 3600) / 60;
+    int seconds = total_seconds % 60;
+
     // Print final report in tabular format
     std::cout << "\n------------------- Scan Report -------------------\n";
     std::cout << std::left << std::setw(35) << "Total Image Files Scanned:" << stats.totalFiles << "\n";
     std::cout << std::left << std::setw(35) << "NSFW Files Detected:" << stats.nsfwFiles << "\n";
     std::cout << std::left << std::setw(35) << "Safe Files Detected:" << stats.safeFiles << "\n";
-    std::cout << std::left << std::setw(35) << "Time Taken (seconds):" << elapsed.count() << "\n";
-    std::cout << std::left << std::setw(35) << "NSFW Files List:" << stats.nsfwFilesList << "\n";
+    std::cout << std::left << std::setw(35) << "NSFW Scan Errors:" << stats.errorFiles << "\n";
+    std::cout << std::left << std::setw(35) << "Time Taken (hh:mm:ss):" 
+              << hours << ":" << std::setw(2) << std::setfill('0') << minutes << ":" << std::setw(2) << seconds << std::setfill(' ') << "\n";
+    std::cout << std::left << std::setw(35) << "NSFW Files List:";
+    for (const auto& file : stats.nsfwFilesList) {
+        std::cout << file << " ";
+    }
+    std::cout << "\n";
     std::cout << "-----------------------------------------------------\n";
     return 0;
 }
