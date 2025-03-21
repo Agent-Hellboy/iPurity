@@ -5,10 +5,9 @@
 #include <string>
 #include <chrono>
 #include <iomanip>
-#include <thread>
-#include <mutex>
 #include <vector>
-#include <future>  // For std::async and std::future
+#include <future>  
+#include <mutex>
 
 // libimobiledevice
 #include <libimobiledevice/libimobiledevice.h>
@@ -47,7 +46,7 @@ bool is_image_file(const std::string &filePath) {
     return (ext == ".jpg" || ext == ".jpeg" ||
             ext == ".png" || ext == ".gif"  ||
             ext == ".bmp" || ext == ".tiff" ||
-            ext == ".webp"); // Add other extensions as needed.
+            ext == ".webp");
 }
 
 /**
@@ -118,8 +117,7 @@ static bool download_file_with_timeout(afc_client_t afc, const char* remotePath,
  * Recursively list files and directories on the iPhone via AFC.
  * For each image file, download the file and run the NSFW check.
  * Statistics are updated in the ScanStats structure.
- * This multithreaded version launches a new thread for each subdirectory
- * and for each image file processing task.
+ * This version uses std::async to avoid manual thread management.
  */
 static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats) {
     char **dirList = nullptr;
@@ -130,7 +128,7 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
         return;
     }
     
-    std::vector<std::thread> threads;
+    std::vector<std::future<void>> tasks;
     
     for (int i = 0; dirList[i]; i++) {
         const char *entry = dirList[i];
@@ -159,58 +157,54 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
             std::string pathStr(fullPath);
             
             if (isDir) {
-                // Spawn a new thread to scan the subdirectory.
-                threads.emplace_back([afc, pathStr, &stats]() {
+                // Launch an async task to scan the subdirectory.
+                tasks.push_back(std::async(std::launch::async, [afc, pathStr, &stats]() {
                     scan_directory(afc, pathStr.c_str(), stats);
-                });
-            } else {
-                if (is_image_file(pathStr)) {
-                    // Spawn a thread to process the image file.
-                    threads.emplace_back([afc, pathStr, &stats]() {
-                        {
-                            std::lock_guard<std::mutex> lock(g_statsMutex);
-                            stats.totalFiles++;
-                        }
-                        std::cout << "Found image file: " << pathStr << std::endl;
-                        // Construct a local file path.
-                        std::string localFile = "/tmp/ios_" + pathStr.substr(pathStr.find_last_of("/") + 1);
-                        // Use the timeout wrapper (10 seconds timeout) for file download.
-                        if (download_file_with_timeout(afc, pathStr.c_str(), localFile.c_str(), std::chrono::seconds(10))) {
-                            try {
-                                bool isNSFW = naiveNSFWCheck(localFile);
-                                {
-                                    std::lock_guard<std::mutex> lock(g_statsMutex);
-                                    if (isNSFW) {
-                                        stats.nsfwFiles++;
-                                        stats.nsfwFilesList.push_back(localFile);
-                                        std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
-                                    } else {
-                                        stats.safeFiles++;
-                                        std::cout << COLOR_GREEN << "[SAFE] " << localFile << COLOR_RESET << std::endl;
-                                    }
-                                }
-                            } catch (...) {
+                }));
+            } else if (is_image_file(pathStr)) {
+                // Launch an async task to process the image file.
+                tasks.push_back(std::async(std::launch::async, [afc, pathStr, &stats]() {
+                    {
+                        std::lock_guard<std::mutex> lock(g_statsMutex);
+                        stats.totalFiles++;
+                    }
+                    std::cout << "Found image file: " << pathStr << std::endl;
+                    // Construct a local file path.
+                    std::string localFile = "/tmp/ios_" + pathStr.substr(pathStr.find_last_of("/") + 1);
+                    // Use the timeout wrapper (10 seconds timeout) for file download.
+                    if (download_file_with_timeout(afc, pathStr.c_str(), localFile.c_str(), std::chrono::seconds(10))) {
+                        try {
+                            bool isNSFW = naiveNSFWCheck(localFile);
+                            {
                                 std::lock_guard<std::mutex> lock(g_statsMutex);
-                                stats.errorFiles++;
-                                std::cerr << "[ERROR] NSFW scan failed for " << localFile << std::endl;
+                                if (isNSFW) {
+                                    stats.nsfwFiles++;
+                                    stats.nsfwFilesList.push_back(localFile);
+                                    std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
+                                } else {
+                                    stats.safeFiles++;
+                                    std::cout << COLOR_GREEN << "[SAFE] " << localFile << COLOR_RESET << std::endl;
+                                }
                             }
-                        } else {
+                        } catch (...) {
                             std::lock_guard<std::mutex> lock(g_statsMutex);
                             stats.errorFiles++;
+                            std::cerr << "[ERROR] NSFW scan failed for " << localFile << std::endl;
                         }
-                    });
-                }
+                    } else {
+                        std::lock_guard<std::mutex> lock(g_statsMutex);
+                        stats.errorFiles++;
+                    }
+                }));
             }
         }
         free(fullPath);
     }
     afc_dictionary_free(dirList);
     
-    // Wait for all threads to complete.
-    for (auto &t : threads) {
-        if (t.joinable()) {
-            t.join();
-        }
+    // Wait for all async tasks to complete.
+    for (auto &task : tasks) {
+        task.get();
     }
 }
 
