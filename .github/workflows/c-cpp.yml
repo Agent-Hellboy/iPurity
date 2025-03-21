@@ -21,6 +21,10 @@ jobs:
 
       - name: Configure with Sanitizer
         run: |
+          ./configure
+
+      - name: Build
+        run: |
           if [ "${{ matrix.sanitizer }}" = "address" ]; then
             export CFLAGS="-fsanitize=address -fno-omit-frame-pointer"
             export CXXFLAGS="-fsanitize=address -fno-omit-frame-pointer"
@@ -28,10 +32,7 @@ jobs:
             export CFLAGS="-fsanitize=thread -fno-omit-frame-pointer"
             export CXXFLAGS="-fsanitize=thread -fno-omit-frame-pointer"
           fi
-          ./configure
-
-      - name: Build
-        run: make
+          make
 
       - name: Test
         run: make check
