@@ -5,6 +5,10 @@
 #include <string>
 #include <chrono>
 #include <iomanip>
+#include <thread>
+#include <mutex>
+#include <vector>
+
 
 // libimobiledevice
 #include <libimobiledevice/libimobiledevice.h>
@@ -18,6 +22,10 @@
 const char* COLOR_GREEN = "\033[32m";
 const char* COLOR_RED   = "\033[31m";
 const char* COLOR_RESET = "\033[0m";
+
+// Global mutexes for protecting shared state and std::cout:
+static std::mutex g_statsMutex;
+static std::mutex g_coutMutex;
 
 // Structure to hold scan statistics
 struct ScanStats {
@@ -78,21 +86,26 @@ static bool download_file(afc_client_t afc, const char* remotePath, const char* 
     return true;
 }
 
-static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats);
-
 /**
  * Recursively list files and directories on the iPhone via AFC.
  * For each image file, download the file and run the NSFW check.
  * Statistics are updated in the ScanStats structure.
+ *
+ * This multithreaded version launches a new thread for each subdirectory
+ * and for each image file processing task.
  */
 static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats) {
-    char **dirList = NULL;
+    char **dirList = nullptr;
     afc_error_t err = afc_read_directory(afc, path, &dirList);
     if (err != AFC_E_SUCCESS) {
+        std::lock_guard<std::mutex> coutLock(g_coutMutex);
         std::cerr << "Error reading directory " << path
                   << " (afc error " << err << ")" << std::endl;
         return;
     }
+
+    // A vector to hold all spawned threads.
+    std::vector<std::thread> threads;
 
     for (int i = 0; dirList[i]; i++) {
         const char *entry = dirList[i];
@@ -102,8 +115,10 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
 
         char *fullPath = nullptr;
         asprintf(&fullPath, "%s/%s", path, entry);
+        if (!fullPath)
+            continue;
 
-        char **fileInfo = NULL;
+        char **fileInfo = nullptr;
         if (afc_get_file_info(afc, fullPath, &fileInfo) == AFC_E_SUCCESS && fileInfo) {
             bool isDir = false;
             for (int j = 0; fileInfo[j]; j += 2) {
@@ -116,33 +131,62 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
             }
             afc_dictionary_free(fileInfo);
 
+            // Copy fullPath into a std::string for safe capture in lambdas.
+            std::string pathStr(fullPath);
+
             if (isDir) {
-                scan_directory(afc, fullPath, stats);
+                // Launch a new thread to scan the subdirectory.
+                threads.emplace_back([afc, pathStr, &stats]() {
+                    // Calling scan_directory recursively with the copied path.
+                    scan_directory(afc, pathStr.c_str(), stats);
+                });
             } else {
-                std::string filePathStr(fullPath);
-                if (is_image_file(filePathStr)) {
-                    stats.totalFiles++;
-                    std::cout << "Found image file: " << fullPath << std::endl;
-                    std::string localFile = "/tmp/ios_" + filePathStr.substr(filePathStr.find_last_of("/") + 1);
-                    if (download_file(afc, fullPath, localFile.c_str())) {
-                        bool isNSFW = naiveNSFWCheck(localFile);
-                        if (isNSFW) {
-                            stats.nsfwFiles++;
-                            std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
-                        } else {
-                            stats.safeFiles++;
-                            std::cout << COLOR_GREEN << "[SAFE] " << localFile << COLOR_RESET << std::endl;
+                if (is_image_file(pathStr)) {
+                    // Launch a new thread to handle the file download and NSFW check.
+                    threads.emplace_back([afc, pathStr, &stats]() {
+                        // Update the total files count.
+                        {
+                            std::lock_guard<std::mutex> lock(g_statsMutex);
+                            stats.totalFiles++;
                         }
-                        // Optionally remove the local file if you don't need it:
-                        // remove(localFile.c_str());
-                    }
+                        {
+                            std::lock_guard<std::mutex> coutLock(g_coutMutex);
+                            std::cout << "Found image file: " << pathStr << std::endl;
+                        }
+                        // Construct a local file path.
+                        std::string localFile = "/tmp/ios_" + pathStr.substr(pathStr.find_last_of("/") + 1);
+                        if (download_file(afc, pathStr.c_str(), localFile.c_str())) {
+                            bool isNSFW = naiveNSFWCheck(localFile);
+                            {
+                                std::lock_guard<std::mutex> lock(g_statsMutex);
+                                if (isNSFW) {
+                                    std::lock_guard<std::mutex> coutLock(g_coutMutex);
+                                    stats.nsfwFiles++;
+                                    std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
+                                } else {
+                                    std::lock_guard<std::mutex> coutLock(g_coutMutex);
+                                    stats.safeFiles++;
+                                    std::cout << COLOR_GREEN << "[SAFE] " << localFile << COLOR_RESET << std::endl;
+                                }
+                            }
+                            // Optionally remove the local file if not needed:
+                            // remove(localFile.c_str());
+                        }
+                    });
                 }
             }
         }
         free(fullPath);
     }
     afc_dictionary_free(dirList);
+
+    for (auto &t : threads) {
+        if (t.joinable()) {
+            t.join();
+        }
+    }
 }
+
 
 /**
  * Main entry point:
