@@ -30,7 +30,12 @@ jobs:
         run: |
           cd build
           cmake --build .
-
+      
+      - name: dist
+        run: |
+          cd build
+          cmake --build . --target dist
+        
       - name: Rename Tarball and Compute SHA
         id: tarball
         run: |

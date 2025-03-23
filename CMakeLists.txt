@@ -58,18 +58,9 @@ add_custom_target(check
 
 # "dist" target: creates a tarball of the distribution
 add_custom_target(dist
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_SOURCE_DIR}/dist
-    COMMAND tar -czf ${PROJECT_SOURCE_DIR}/dist/ipurity.tar.gz
-            README.md configure Makefile include src
-            --exclude='*.o' --exclude='dist' --exclude='*.tar.gz'
-    COMMENT "Creating distribution tarball..."
-)
-
-# "distcheck" target: depends on dist and echoes dummy messages
-add_custom_target(distcheck
-    DEPENDS dist
-    COMMAND ${CMAKE_COMMAND} -E echo "Running distcheck (dummy)."
-    COMMAND ${CMAKE_COMMAND} -E echo "Would normally build and test from the unpacked tarball."
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_SOURCE_DIR}/dist
+  COMMAND ${CMAKE_COMMAND} -E chdir ${PROJECT_SOURCE_DIR} /usr/bin/tar -czf dist/ipurity.tar.gz CMakeLists.txt LICENSE README.md configure include src
+  COMMENT "Creating distribution tarball..."
 )
 
 # Installation
