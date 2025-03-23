@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>      
 #include <chrono>
 #include <iomanip>
 
@@ -78,7 +79,6 @@ static bool download_file(afc_client_t afc, const char* remotePath, const char* 
     std::fclose(outFile);
     return true;
 }
-
 
 /**
  * Recursively list files and directories on the iPhone via AFC.
@@ -201,7 +201,6 @@ int main(int argc, char *argv[]) {
     auto endTime = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = endTime - startTime;
     
-
     // Cleanup
     afc_client_free(afc);
     lockdownd_client_free(client);

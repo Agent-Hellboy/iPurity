@@ -3,7 +3,7 @@
 
 #include <string>
 
-const float DEFAULT_SKIN_THRESHOLD = 0.3f;
+const float DEFAULT_SKIN_THRESHOLD = 0.6f;
 
 /**
  * Loads an image from 'imagePath', converts to YCrCb,
