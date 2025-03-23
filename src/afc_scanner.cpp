@@ -88,7 +88,7 @@ static bool download_file(afc_client_t afc, const char *remotePath,
  * Statistics are updated in the ScanStats structure.
  */
 static void scan_directory(afc_client_t afc, const char *path,
-                           ScanStats &stats) {
+                           ScanStats &stats, float threshold) {
     char **dirList = NULL;
     afc_error_t err = afc_read_directory(afc, path, &dirList);
     if (err != AFC_E_SUCCESS) {
@@ -121,7 +121,7 @@ static void scan_directory(afc_client_t afc, const char *path,
             afc_dictionary_free(fileInfo);
 
             if (isDir) {
-                scan_directory(afc, fullPath, stats);
+                scan_directory(afc, fullPath, stats, threshold);
             } else {
                 std::string filePathStr(fullPath);
                 if (is_image_file(filePathStr)) {
@@ -131,7 +131,7 @@ static void scan_directory(afc_client_t afc, const char *path,
                         "/tmp/ios_" +
                         filePathStr.substr(filePathStr.find_last_of("/") + 1);
                     if (download_file(afc, fullPath, localFile.c_str())) {
-                        bool isNSFW = naiveNSFWCheck(localFile);
+                        bool isNSFW = naiveNSFWCheck(localFile, threshold);
                         if (isNSFW) {
                             stats.nsfwFiles++;
                             stats.nsfwFilesList.push_back(localFile);
@@ -162,6 +162,18 @@ static void scan_directory(afc_client_t afc, const char *path,
  * 6. Print a final report of the scan statistics.
  */
 int main(int argc, char *argv[]) {
+    std::cout << "iPurity - NSFW Scanner" << std::endl;
+    std::cout << "----------------------" << std::endl;
+    float threshold = DEFAULT_SKIN_THRESHOLD;
+    if (argc > 1) {
+        threshold = std::stof(argv[1]);
+        if (threshold < 0.0 || threshold > 1.0) {
+            std::cerr << "Threshold must be between 0.0 and 1.0" << std::endl;
+            return 1;
+        }
+    }
+    
+    
     idevice_t device = NULL;
     lockdownd_client_t client = NULL;
     lockdownd_service_descriptor_t service = NULL;
@@ -206,7 +218,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Scanning directory: " << rootPath << std::endl;
 
     ScanStats stats;
-    scan_directory(afc, rootPath, stats);
+    scan_directory(afc, rootPath, stats, threshold);
 
     // End timer for the scan
     auto endTime = std::chrono::high_resolution_clock::now();
@@ -229,4 +241,5 @@ int main(int argc, char *argv[]) {
     }
     std::cout << "-----------------------------------------------------\n";
     return 0;
+    std::cout << "----------------------" << std::endl;
 }
