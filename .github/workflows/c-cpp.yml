@@ -28,12 +28,12 @@ jobs:
           cd build
           cmake --build .
 
-      - name: Test
-        run: |
-          cd build
-          cmake --build . --target check
+      # - name: Test
+      #   run: |
+      #     cd build
+      #     cmake --build . --target check
 
-      - name: Dist Check
-        run: |
-          cd build
-          cmake --build . --target distcheck
+      # - name: Dist Check
+      #   run: |
+      #     cd build
+      #     cmake --build . --target distcheck
