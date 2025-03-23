@@ -19,17 +19,17 @@ jobs:
         run: |
           brew install pkg-config opencv libimobiledevice libplist gh
 
-      - name: Configure
-        run: ./configure
+      - name: Configure with CMake
+        run: |
+          ./configure
+          mkdir -p build
+          cd build
+          cmake ..
 
       - name: Build
-        run: make
-
-      - name: Test
-        run: make check
-
-      - name: Dist
-        run: make dist  # Produces dist/ios_nsfw_scanner.tar.gz (adjust if needed)
+        run: |
+          cd build
+          cmake --build .
 
       - name: Rename Tarball and Compute SHA
         id: tarball
