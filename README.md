@@ -50,7 +50,7 @@ sudo cmake --build . --target install
 ## Usage
 
 ```bash 
-./ipurity
+./ipurity <threshold> //By default <threshold> is set to 0.6
 ```
 
 ## License  
