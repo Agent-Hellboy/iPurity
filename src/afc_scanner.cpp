@@ -24,6 +24,7 @@ struct ScanStats {
     int totalFiles = 0;
     int nsfwFiles  = 0;
     int safeFiles  = 0;
+    std::vector<std::string> nsfwFilesList;
 };
 
 // Check if the file extension indicates an image file.
@@ -78,7 +79,6 @@ static bool download_file(afc_client_t afc, const char* remotePath, const char* 
     return true;
 }
 
-static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats);
 
 /**
  * Recursively list files and directories on the iPhone via AFC.
@@ -128,6 +128,7 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
                         bool isNSFW = naiveNSFWCheck(localFile);
                         if (isNSFW) {
                             stats.nsfwFiles++;
+                            stats.nsfwFilesList.push_back(localFile);
                             std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
                         } else {
                             stats.safeFiles++;
@@ -199,6 +200,7 @@ int main(int argc, char *argv[]) {
     // End timer for the scan
     auto endTime = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = endTime - startTime;
+    
 
     // Cleanup
     afc_client_free(afc);
@@ -210,8 +212,11 @@ int main(int argc, char *argv[]) {
     std::cout << std::left << std::setw(35) << "Total Image Files Scanned:" << stats.totalFiles << "\n";
     std::cout << std::left << std::setw(35) << "NSFW Files Detected:" << stats.nsfwFiles << "\n";
     std::cout << std::left << std::setw(35) << "Safe Files Detected:" << stats.safeFiles << "\n";
-    std::cout << std::left << std::setw(35) << "Time Taken (seconds):" << elapsed.count() << "\n";
+    std::cout << std::left << std::setw(35) << "Time Taken minutes:" << elapsed.count() / 60 << "\n";
+    std::cout << "NSFW Files List:" << std::endl;
+    for (const auto &file : stats.nsfwFilesList) {
+        std::cout << file << std::endl;
+    }
     std::cout << "-----------------------------------------------------\n";
-
     return 0;
 }

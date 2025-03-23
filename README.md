@@ -35,7 +35,16 @@ brew install ipurity
 
 ### Option 2: Build from Source
 ```bash
-make
+./configure
+mkdir build
+cd build
+cmake ..
+cmake --build .
+```
+
+### Installation
+```bash
+sudo cmake --build . --target install
 ```
 
 ## Usage

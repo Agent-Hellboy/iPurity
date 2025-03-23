@@ -16,15 +16,23 @@ jobs:
         run: |
           brew install pkg-config opencv libimobiledevice libplist
 
-      - name: Configure
-        run: ./configure
+      - name: Configure with CMake
+        run: |
+          mkdir -p build
+          cd build
+          cmake ..
 
       - name: Build
-        run: make
+        run: |
+          cd build
+          cmake --build .
 
       - name: Test
-        run: make check
+        run: |
+          cd build
+          cmake --build . --target check
 
       - name: Dist Check
-        run: make distcheck
-
+        run: |
+          cd build
+          cmake --build . --target distcheck
