@@ -26,7 +26,7 @@ Note: Tested only on Apple Silicon Mac
 
 ### Option 1: Homebrew (Custom Tap)
 
-You can install iPurity from your custom Homebrew tap:
+You can install iPurity from our custom Homebrew tap:
 
 ```bash
 brew tap Agent-Hellboy/homebrew-agent-hellboy-formula
