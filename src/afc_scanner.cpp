@@ -2,10 +2,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <string>
-#include <vector>
 #include <iomanip>
 #include <iostream>
+#include <string>
+#include <vector>
 
 // libimobiledevice
 #include <libimobiledevice/afc.h>
@@ -16,26 +16,26 @@
 #include "nsfw_detector.h"
 
 // ANSI escape codes for colors
-const char *COLOR_GREEN = "\033[32m";
-const char *COLOR_RED = "\033[31m";
-const char *COLOR_RESET = "\033[0m";
+const char* COLOR_GREEN = "\033[32m";
+const char* COLOR_RED = "\033[31m";
+const char* COLOR_RESET = "\033[0m";
 
 // Structure to hold scan statistics
 struct ScanStats {
     int totalFiles = 0;
-    int nsfwFiles  = 0;
-    int safeFiles  = 0;
+    int nsfwFiles = 0;
+    int safeFiles = 0;
     std::vector<std::string> nsfwFilesList;
 };
 
 // Check if the file extension indicates an image file.
-bool is_image_file(const std::string &filePath) {
+bool is_image_file(const std::string& filePath) {
     size_t dotPos = filePath.find_last_of('.');
     if (dotPos == std::string::npos) return false;
 
     std::string ext = filePath.substr(dotPos);
     // Convert extension to lowercase
-    for (auto &c : ext) c = tolower(c);
+    for (auto& c : ext) c = tolower(c);
 
     return (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" ||
             ext == ".bmp" || ext == ".tiff" ||
@@ -48,8 +48,8 @@ bool is_image_file(const std::string &filePath) {
  *
  * Returns true on success, false on error.
  */
-static bool download_file(afc_client_t afc, const char *remotePath,
-                          const char *localPath) {
+static bool download_file(afc_client_t afc, const char* remotePath,
+                          const char* localPath) {
     uint64_t fileRef = 0;
     if (afc_file_open(afc, remotePath, AFC_FOPEN_RDONLY, &fileRef) !=
         AFC_E_SUCCESS) {
@@ -57,7 +57,7 @@ static bool download_file(afc_client_t afc, const char *remotePath,
         return false;
     }
 
-    FILE *outFile = std::fopen(localPath, "wb");
+    FILE* outFile = std::fopen(localPath, "wb");
     if (!outFile) {
         std::cerr << "Failed to open local file: " << localPath << std::endl;
         afc_file_close(afc, fileRef);
@@ -87,9 +87,9 @@ static bool download_file(afc_client_t afc, const char *remotePath,
  * For each image file, download the file and run the NSFW check.
  * Statistics are updated in the ScanStats structure.
  */
-static void scan_directory(afc_client_t afc, const char *path,
-                           ScanStats &stats, float threshold) {
-    char **dirList = NULL;
+static void scan_directory(afc_client_t afc, const char* path, ScanStats& stats,
+                           float threshold) {
+    char** dirList = NULL;
     afc_error_t err = afc_read_directory(afc, path, &dirList);
     if (err != AFC_E_SUCCESS) {
         std::cerr << "Error reading directory " << path << " (afc error " << err
@@ -98,15 +98,15 @@ static void scan_directory(afc_client_t afc, const char *path,
     }
 
     for (int i = 0; dirList[i]; i++) {
-        const char *entry = dirList[i];
+        const char* entry = dirList[i];
         if (strcmp(entry, ".") == 0 || strcmp(entry, "..") == 0) {
             continue;
         }
 
-        char *fullPath = nullptr;
+        char* fullPath = nullptr;
         asprintf(&fullPath, "%s/%s", path, entry);
 
-        char **fileInfo = NULL;
+        char** fileInfo = NULL;
         if (afc_get_file_info(afc, fullPath, &fileInfo) == AFC_E_SUCCESS &&
             fileInfo) {
             bool isDir = false;
@@ -135,7 +135,8 @@ static void scan_directory(afc_client_t afc, const char *path,
                         if (isNSFW) {
                             stats.nsfwFiles++;
                             stats.nsfwFilesList.push_back(localFile);
-                            std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
+                            std::cout << COLOR_RED << "[NSFW DETECTED] "
+                                      << localFile << COLOR_RESET << std::endl;
                         } else {
                             stats.safeFiles++;
                             std::cout << COLOR_GREEN << "[SAFE] " << localFile
@@ -161,7 +162,7 @@ static void scan_directory(afc_client_t afc, const char *path,
  * 5. Download each image and run naiveNSFWCheck on it.
  * 6. Print a final report of the scan statistics.
  */
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     std::cout << "iPurity - NSFW Scanner" << std::endl;
     std::cout << "----------------------" << std::endl;
     float threshold = DEFAULT_SKIN_THRESHOLD;
@@ -172,8 +173,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     }
-    
-    
+
     idevice_t device = NULL;
     lockdownd_client_t client = NULL;
     lockdownd_service_descriptor_t service = NULL;
@@ -214,7 +214,7 @@ int main(int argc, char *argv[]) {
     // Start timer for the scan
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    const char *rootPath = "/DCIM";
+    const char* rootPath = "/DCIM";
     std::cout << "Scanning directory: " << rootPath << std::endl;
 
     ScanStats stats;
@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
     // End timer for the scan
     auto endTime = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = endTime - startTime;
-    
+
     // Cleanup
     afc_client_free(afc);
     lockdownd_client_free(client);
@@ -231,12 +231,16 @@ int main(int argc, char *argv[]) {
 
     // Print final report in tabular format
     std::cout << "\n------------------- Scan Report -------------------\n";
-    std::cout << std::left << std::setw(35) << "Total Image Files Scanned:" << stats.totalFiles << "\n";
-    std::cout << std::left << std::setw(35) << "NSFW Files Detected:" << stats.nsfwFiles << "\n";
-    std::cout << std::left << std::setw(35) << "Safe Files Detected:" << stats.safeFiles << "\n";
-    std::cout << std::left << std::setw(35) << "Time Taken minutes:" << elapsed.count() / 60 << "\n";
+    std::cout << std::left << std::setw(35)
+              << "Total Image Files Scanned:" << stats.totalFiles << "\n";
+    std::cout << std::left << std::setw(35)
+              << "NSFW Files Detected:" << stats.nsfwFiles << "\n";
+    std::cout << std::left << std::setw(35)
+              << "Safe Files Detected:" << stats.safeFiles << "\n";
+    std::cout << std::left << std::setw(35)
+              << "Time Taken minutes:" << elapsed.count() / 60 << "\n";
     std::cout << "NSFW Files List:" << std::endl;
-    for (const auto &file : stats.nsfwFilesList) {
+    for (const auto& file : stats.nsfwFilesList) {
         std::cout << file << std::endl;
     }
     std::cout << "-----------------------------------------------------\n";
