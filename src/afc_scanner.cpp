@@ -1,24 +1,24 @@
-#include <iostream>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
-#include <vector>      
-#include <chrono>
+#include <vector>
 #include <iomanip>
+#include <iostream>
 
 // libimobiledevice
+#include <libimobiledevice/afc.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
-#include <libimobiledevice/afc.h>
 
 // Our naive NSFW detection
 #include "nsfw_detector.h"
 
 // ANSI escape codes for colors
-const char* COLOR_GREEN = "\033[32m";
-const char* COLOR_RED   = "\033[31m";
-const char* COLOR_RESET = "\033[0m";
+const char *COLOR_GREEN = "\033[32m";
+const char *COLOR_RED = "\033[31m";
+const char *COLOR_RESET = "\033[0m";
 
 // Structure to hold scan statistics
 struct ScanStats {
@@ -32,15 +32,14 @@ struct ScanStats {
 bool is_image_file(const std::string &filePath) {
     size_t dotPos = filePath.find_last_of('.');
     if (dotPos == std::string::npos) return false;
-    
+
     std::string ext = filePath.substr(dotPos);
     // Convert extension to lowercase
     for (auto &c : ext) c = tolower(c);
-    
-    return (ext == ".jpg" || ext == ".jpeg" ||
-            ext == ".png" || ext == ".gif"  ||
+
+    return (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" ||
             ext == ".bmp" || ext == ".tiff" ||
-            ext == ".webp"); // Add other extensions as needed.
+            ext == ".webp");  // Add other extensions as needed.
 }
 
 /**
@@ -49,14 +48,16 @@ bool is_image_file(const std::string &filePath) {
  *
  * Returns true on success, false on error.
  */
-static bool download_file(afc_client_t afc, const char* remotePath, const char* localPath) {
+static bool download_file(afc_client_t afc, const char *remotePath,
+                          const char *localPath) {
     uint64_t fileRef = 0;
-    if (afc_file_open(afc, remotePath, AFC_FOPEN_RDONLY, &fileRef) != AFC_E_SUCCESS) {
+    if (afc_file_open(afc, remotePath, AFC_FOPEN_RDONLY, &fileRef) !=
+        AFC_E_SUCCESS) {
         std::cerr << "Failed to open remote file: " << remotePath << std::endl;
         return false;
     }
 
-    FILE* outFile = std::fopen(localPath, "wb");
+    FILE *outFile = std::fopen(localPath, "wb");
     if (!outFile) {
         std::cerr << "Failed to open local file: " << localPath << std::endl;
         afc_file_close(afc, fileRef);
@@ -68,7 +69,8 @@ static bool download_file(afc_client_t afc, const char* remotePath, const char* 
     uint32_t bytesRead = 0;
 
     while (true) {
-        afc_error_t readErr = afc_file_read(afc, fileRef, buffer, BUF_SIZE, &bytesRead);
+        afc_error_t readErr =
+            afc_file_read(afc, fileRef, buffer, BUF_SIZE, &bytesRead);
         if (readErr != AFC_E_SUCCESS || bytesRead == 0) {
             break;
         }
@@ -85,12 +87,13 @@ static bool download_file(afc_client_t afc, const char* remotePath, const char* 
  * For each image file, download the file and run the NSFW check.
  * Statistics are updated in the ScanStats structure.
  */
-static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats) {
+static void scan_directory(afc_client_t afc, const char *path,
+                           ScanStats &stats) {
     char **dirList = NULL;
     afc_error_t err = afc_read_directory(afc, path, &dirList);
     if (err != AFC_E_SUCCESS) {
-        std::cerr << "Error reading directory " << path
-                  << " (afc error " << err << ")" << std::endl;
+        std::cerr << "Error reading directory " << path << " (afc error " << err
+                  << ")" << std::endl;
         return;
     }
 
@@ -104,7 +107,8 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
         asprintf(&fullPath, "%s/%s", path, entry);
 
         char **fileInfo = NULL;
-        if (afc_get_file_info(afc, fullPath, &fileInfo) == AFC_E_SUCCESS && fileInfo) {
+        if (afc_get_file_info(afc, fullPath, &fileInfo) == AFC_E_SUCCESS &&
+            fileInfo) {
             bool isDir = false;
             for (int j = 0; fileInfo[j]; j += 2) {
                 if (strcmp(fileInfo[j], "st_ifmt") == 0) {
@@ -123,7 +127,9 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
                 if (is_image_file(filePathStr)) {
                     stats.totalFiles++;
                     std::cout << "Found image file: " << fullPath << std::endl;
-                    std::string localFile = "/tmp/ios_" + filePathStr.substr(filePathStr.find_last_of("/") + 1);
+                    std::string localFile =
+                        "/tmp/ios_" +
+                        filePathStr.substr(filePathStr.find_last_of("/") + 1);
                     if (download_file(afc, fullPath, localFile.c_str())) {
                         bool isNSFW = naiveNSFWCheck(localFile);
                         if (isNSFW) {
@@ -132,10 +138,11 @@ static void scan_directory(afc_client_t afc, const char *path, ScanStats &stats)
                             std::cout << COLOR_RED << "[NSFW DETECTED] " << localFile << COLOR_RESET << std::endl;
                         } else {
                             stats.safeFiles++;
-                            std::cout << COLOR_GREEN << "[SAFE] " << localFile << COLOR_RESET << std::endl;
+                            std::cout << COLOR_GREEN << "[SAFE] " << localFile
+                                      << COLOR_RESET << std::endl;
                         }
-                        // Optionally remove the local file if you don't need it:
-                        // remove(localFile.c_str());
+                        // Optionally remove the local file if you don't need
+                        // it: remove(localFile.c_str());
                     }
                 }
             }
@@ -161,17 +168,21 @@ int main(int argc, char *argv[]) {
     afc_client_t afc = NULL;
 
     if (idevice_new(&device, NULL) != IDEVICE_E_SUCCESS) {
-        std::cerr << "No iOS device found. Is it plugged in and trusted?" << std::endl;
+        std::cerr << "No iOS device found. Is it plugged in and trusted?"
+                  << std::endl;
         return 1;
     }
 
-    if (lockdownd_client_new_with_handshake(device, &client, "afc_scanner") != LOCKDOWN_E_SUCCESS) {
+    if (lockdownd_client_new_with_handshake(device, &client, "afc_scanner") !=
+        LOCKDOWN_E_SUCCESS) {
         std::cerr << "Could not create lockdownd client." << std::endl;
         idevice_free(device);
         return 1;
     }
 
-    if (lockdownd_start_service(client, AFC_SERVICE_NAME, &service) != LOCKDOWN_E_SUCCESS || !service) {
+    if (lockdownd_start_service(client, AFC_SERVICE_NAME, &service) !=
+            LOCKDOWN_E_SUCCESS ||
+        !service) {
         std::cerr << "Could not start AFC service." << std::endl;
         lockdownd_client_free(client);
         idevice_free(device);

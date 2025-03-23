@@ -10,6 +10,7 @@ const float DEFAULT_SKIN_THRESHOLD = 0.6f;
  * and checks the ratio of "skin" pixels. If ratio >= skinThreshold,
  * returns true (flag as NSFW). Otherwise false.
  */
-bool naiveNSFWCheck(const std::string& imagePath, float skinThreshold  = DEFAULT_SKIN_THRESHOLD);
+bool naiveNSFWCheck(const std::string& imagePath,
+                    float skinThreshold = DEFAULT_SKIN_THRESHOLD);
 
-#endif // NSFW_DETECTOR_H
+#endif  // NSFW_DETECTOR_H
