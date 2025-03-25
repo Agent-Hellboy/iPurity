@@ -1,9 +1,13 @@
-#pragma once
+#ifndef AFC_HELPERS_H
+#define AFC_HELPERS_H
 #include <libimobiledevice/afc.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
 
 #include <string>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 /**
  * Build the full path for a directory entry.
  */
@@ -18,3 +22,5 @@ bool is_directory(afc_client_t afc, const char* fullPath);
  * Check if the file extension indicates an image file.
  */
 bool is_image_file(const std::string& filePath);
+
+#endif

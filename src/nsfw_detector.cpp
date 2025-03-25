@@ -1,15 +1,14 @@
 #include "nsfw_detector.h"
 
-#include <opencv2/opencv.hpp>
 #include <iostream>
+#include <opencv2/opencv.hpp>
 #include <string>
 
 /**
  * Check if a pixel (in YCrCb) is within a naive "skin" range.
  * This function assumes the pixel is in [Y, Cr, Cb] order.
  */
-static bool isSkinPixel(const cv::Vec3b& ycrcb)
-{
+static bool isSkinPixel(const cv::Vec3b& ycrcb) {
     uchar Cr = ycrcb[1];
     uchar Cb = ycrcb[2];
 
@@ -22,8 +21,7 @@ static bool isSkinPixel(const cv::Vec3b& ycrcb)
     return false;
 }
 
-bool naiveNSFWCheck(const std::string& imagePath, float skinThreshold )
-{
+bool naiveNSFWCheck(const std::string& imagePath, float skinThreshold) {
     // 1. Load the image in BGR format
     cv::Mat imgBGR = cv::imread(imagePath, cv::IMREAD_COLOR);
     if (imgBGR.empty()) {
@@ -37,7 +35,7 @@ bool naiveNSFWCheck(const std::string& imagePath, float skinThreshold )
 
     // 3. Count how many pixels fall in "skin" range
     long totalPixels = static_cast<long>(imgYCrCb.rows) * imgYCrCb.cols;
-    long skinCount   = 0;
+    long skinCount = 0;
 
     for (int y = 0; y < imgYCrCb.rows; y++) {
         const cv::Vec3b* rowPtr = imgYCrCb.ptr<cv::Vec3b>(y);
@@ -49,7 +47,8 @@ bool naiveNSFWCheck(const std::string& imagePath, float skinThreshold )
     }
 
     // 4. Compute ratio of skin pixels
-    float ratio = static_cast<float>(skinCount) / static_cast<float>(totalPixels);
+    float ratio =
+        static_cast<float>(skinCount) / static_cast<float>(totalPixels);
 
     // 5. Return true if ratio >= threshold
     return (ratio >= skinThreshold);

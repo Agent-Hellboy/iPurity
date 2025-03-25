@@ -1,10 +1,4 @@
-// afc_helpers.cpp
 #include "afc_helpers.h"
-
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <string>
 
 char* build_full_path(const char* directory, const char* entry) {
     char* fullPath = nullptr;
