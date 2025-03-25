@@ -21,7 +21,10 @@ AfcClientPool::~AfcClientPool() {
 
 afc_client_t AfcClientPool::acquire() {
     std::unique_lock<std::mutex> lock(mtx_);
-    cv_.wait(lock, [this]() { return !pool_.empty(); });
+    // Add a timeout to prevent indefinite waiting
+    if (!cv_.wait_for(lock, std::chrono::seconds(30), [this]() { return !pool_.empty(); })) {
+        throw std::runtime_error("Timeout waiting for available AFC client");
+    }
     afc_client_t client = pool_.back();
     pool_.pop_back();
     return client;
