@@ -53,7 +53,17 @@ sudo cmake --build . --target install
 ./ipurity <threshold> //By default <threshold> is set to 0.6
 ```
 
-## Architecture Overview
+## Development
+
+### Build with `-fsanitize=thread` option
+
+```bash
+export CFLAGS="-fsanitize=thread"
+export LDFLAGS="-fsanitize=thread"
+cmake -DCMAKE_CXX_FLAGS="-fsanitize=thread" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" ..
+```
+
+### Architecture Overview
 ```
                     +----------------+
                     |     main()     |
