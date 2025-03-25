@@ -31,10 +31,13 @@ link_directories(/opt/homebrew/lib)
 
 # Define the executable and its source files
 add_executable(ipurity
-    src/afc_scanner.cpp
+    src/main.cpp
+    src/scanner.cpp
+    src/afc_client_pool.cpp
     src/nsfw_detector.cpp
     src/afc_helpers.cpp
 )
+
 
 # Set compiler warnings
 target_compile_options(ipurity PRIVATE -Wall -Wextra)
