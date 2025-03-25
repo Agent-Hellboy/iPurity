@@ -33,6 +33,7 @@ link_directories(/opt/homebrew/lib)
 add_executable(ipurity
     src/afc_scanner.cpp
     src/nsfw_detector.cpp
+    src/afc_helpers.cpp
 )
 
 # Set compiler warnings
