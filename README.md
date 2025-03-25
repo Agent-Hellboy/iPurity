@@ -53,6 +53,57 @@ sudo cmake --build . --target install
 ./ipurity <threshold> //By default <threshold> is set to 0.6
 ```
 
+## Development
+
+### Build with `-fsanitize=thread` option
+
+```bash
+export CFLAGS="-fsanitize=thread"
+export LDFLAGS="-fsanitize=thread"
+cmake -DCMAKE_CXX_FLAGS="-fsanitize=thread" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread" ..
+```
+
+### Architecture Overview
+```
+                    +----------------+
+                    |     main()     |
+                    +----------------+
+                            │
+                            ▼
+            +-------------------------------+
+            | Create Device & AFC Client Pool |
+            +-------------------------------+
+                            │
+                            ▼
+                    +-----------------+
+                    | scan_directory()|
+                    +-----------------+
+                            │
+         ┌──────────────────┼──────────────────┐
+         │                                     │
+         ▼                                     ▼
+[Directory Entry]                      [File Entry]
+(recursive call)               (launch async task for file)
+                                         │
+                                         ▼
+                                +---------------------------+
+                                | process_image_file()      |
+                                +---------------------------+
+                                         │
+                                         ▼
+                           +-------------------------------+
+                           |  [Thread X]                   |
+                           |  1. Acquire AFC client from   |
+                           |     pool                      |
+                           |  2. download_file()           |
+                           |  3. naiveNSFWCheck()          |
+                           |  4. Release client back to pool|
+                           |  5. Update ScanStats (mutex)  |
+                           +-------------------------------+
+```
+
 ## License  
 
 iPurity is released under the MIT License.
+
+
