@@ -1,9 +1,5 @@
-#include <iostream>
-
-#include <libimobiledevice/afc.h>
-#include <libimobiledevice/lockdown.h>
-
 #include "afc_client_pool.h"
+
 
 AfcClientPool::AfcClientPool(idevice_t device, int poolSize) : device_(device) {
     for (int i = 0; i < poolSize; i++) {

@@ -15,10 +15,6 @@ struct ScanStats {
 };
 
 // Scanner functions.
-bool download_file(afc_client_t afc, const char* remotePath,
-                   const char* localPath);
-void process_image_file(AfcClientPool* pool, const char* fullPath,
-                        ScanStats& stats, float threshold);
 void scan_directory(AfcClientPool* pool, const char* path, ScanStats& stats,
                     float threshold);
 

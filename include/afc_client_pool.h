@@ -1,13 +1,12 @@
 #ifndef AFC_CLIENT_POOL_H
 #define AFC_CLIENT_POOL_H
-#include <condition_variable>
-#include <mutex>
-#include <vector>
-
 #include <libimobiledevice/afc.h>
 #include <libimobiledevice/lockdown.h>
 
-
+#include <iostream>
+#include <condition_variable>
+#include <mutex>
+#include <vector>
 
 class AfcClientPool {
    public:

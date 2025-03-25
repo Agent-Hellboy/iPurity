@@ -42,7 +42,14 @@ bool download_file(afc_client_t afc, const char* remotePath,
         afc_error_t readErr =
             afc_file_read(afc, fileRef, buffer, BUF_SIZE, &bytesRead);
         if (readErr != AFC_E_SUCCESS || bytesRead == 0) break;
-        std::fwrite(buffer, 1, bytesRead, outFile);
+        size_t bytesWritten = std::fwrite(buffer, 1, bytesRead, outFile);
+        if (bytesWritten < bytesRead) {
+            std::lock_guard<std::mutex> lock(coutMutex);
+            std::cerr << "Failed to write all data to local file." << std::endl;
+            std::fclose(outFile);
+            afc_file_close(afc, fileRef);
+            return false;
+        }
     }
     afc_file_close(afc, fileRef);
     std::fclose(outFile);

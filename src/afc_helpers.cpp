@@ -1,8 +1,3 @@
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <string>
-
 #include "afc_helpers.h"
 
 char* build_full_path(const char* directory, const char* entry) {

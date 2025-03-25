@@ -1,11 +1,13 @@
 #ifndef AFC_HELPERS_H
 #define AFC_HELPERS_H
-#include <string>
-
 #include <libimobiledevice/afc.h>
 #include <libimobiledevice/libimobiledevice.h>
 #include <libimobiledevice/lockdown.h>
 
+#include <string>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 /**
  * Build the full path for a directory entry.
  */

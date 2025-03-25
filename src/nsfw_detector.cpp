@@ -1,8 +1,8 @@
+#include "nsfw_detector.h"
+
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <string>
-
-#include "nsfw_detector.h"
 
 /**
  * Check if a pixel (in YCrCb) is within a naive "skin" range.
