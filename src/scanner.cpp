@@ -98,38 +98,81 @@ void process_image_file(AfcClientPool* pool, const char* fullPath,
     pool->release(client);
 }
 
-void scan_directory(AfcClientPool* pool, const char* path, ScanStats& stats,
-                    float threshold) {
+// Define a maximum number of concurrent tasks to prevent resource exhaustion
+const size_t MAX_CONCURRENT_TASKS = 20;
+
+void scan_directory(AfcClientPool* pool, const char* path, ScanStats& stats, float threshold) {
+    if (!pool || !path) {
+        std::cerr << "Invalid parameters passed to scan_directory" << std::endl;
+        return;
+    }
+
     afc_client_t client = pool->acquire();
+    // Use RAII to ensure client is released
+    struct ClientGuard {
+        AfcClientPool* pool;
+        afc_client_t client;
+        ClientGuard(AfcClientPool* p, afc_client_t c) : pool(p), client(c) {}
+        ~ClientGuard() { if (pool && client) pool->release(client); }
+    } clientGuard{pool, client};
+
     char** dirList = nullptr;
-    afc_error_t err = afc_read_directory(client, path, &dirList);
-    pool->release(client);
+    afc_error_t err = afc_read_directory(clientGuard.client, path, &dirList);
+    clientGuard.client = nullptr; // Release ownership as we're done with this client
 
     if (err != AFC_E_SUCCESS) {
         std::lock_guard<std::mutex> lock(coutMutex);
-        std::cerr << "Error reading directory " << path << " (afc error " << err
-                  << ")" << std::endl;
+        std::cerr << "Error reading directory " << path << " (afc error " << err << ")" << std::endl;
+        // No need to free dirList here as it wasn't successfully populated
         return;
     }
+
+    // RAII wrapper to ensure dirList is freed
+    struct DirListGuard {
+        char** dirList;
+        ~DirListGuard() { if (dirList) afc_dictionary_free(dirList); }
+    } dirListGuard{dirList};
 
     for (int i = 0; dirList[i]; i++) {
         const char* entry = dirList[i];
         if (strcmp(entry, ".") == 0 || strcmp(entry, "..") == 0) continue;
 
         char* fullPath = build_full_path(path, entry);
+        if (!fullPath) {
+            std::lock_guard<std::mutex> lock(coutMutex);
+            std::cerr << "Failed to build full path for " << entry << std::endl;
+            continue;
+        }
+        // RAII wrapper to ensure fullPath is freed
+        struct PathGuard {
+            char* path;
+            ~PathGuard() { if (path) free(path); }
+        } pathGuard{fullPath};
 
-        client = pool->acquire();
-        bool isDir = is_directory(client, fullPath);
-        pool->release(client);
+        afc_client_t client = pool->acquire();
+        ClientGuard innerGuard{pool, client};
+        bool isDir = is_directory(innerGuard.client, fullPath);
+        innerGuard.client = nullptr; // Release ownership
 
         if (isDir) {
             scan_directory(pool, fullPath, stats, threshold);
         } else {
+            // Wait if we have too many pending tasks
+            while (futures.size() >= MAX_CONCURRENT_TASKS) {
+                // Check for and remove completed futures
+                auto it = std::remove_if(futures.begin(), futures.end(),
+                                           [](const std::future<void>& f) {
+                                               return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+                                           });
+                futures.erase(it, futures.end());
+                if (futures.size() >= MAX_CONCURRENT_TASKS) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+            }
             futures.push_back(std::async(std::launch::async, process_image_file,
-                                         pool, fullPath, std::ref(stats),
-                                         threshold));
+                                         pool, fullPath, std::ref(stats), threshold));
         }
-        free(fullPath);
+        // fullPath will be freed automatically by PathGuard
     }
-    afc_dictionary_free(dirList);
+    // dirList will be freed automatically by DirListGuard
 }
