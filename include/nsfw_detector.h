@@ -1,16 +1,19 @@
-#ifndef NSFW_DETECTOR_H
-#define NSFW_DETECTOR_H
+#ifndef NAIVE_NSFW_SCANNER_H
+#define NAIVE_NSFW_SCANNER_H
 
+#include "INsfwScanner.h"
+#include <opencv2/opencv.hpp>
 #include <string>
 
-const float DEFAULT_SKIN_THRESHOLD = 0.6f;
+class NaiveNsfwScanner : public INsfwScanner {
+public:
+    bool scan(const std::string& filePath, float threshold) override;
 
-/**
- * Loads an image from 'imagePath', converts to YCrCb,
- * and checks the ratio of "skin" pixels. If ratio >= skinThreshold,
- * returns true (flag as NSFW). Otherwise false.
- */
-bool naiveNSFWCheck(const std::string& imagePath,
-                    float skinThreshold = DEFAULT_SKIN_THRESHOLD);
+private:
+    bool isSkinPixel(const cv::Vec3b& ycrcb) const;
+    bool naiveNSFWCheck(const std::string& imagePath, float skinThreshold) const;
+};
 
-#endif  // NSFW_DETECTOR_H
+#endif // NAIVE_NSFW_SCANNER_H
+
+

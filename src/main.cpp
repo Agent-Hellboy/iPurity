@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
         std::cout << "----------------------" << std::endl;
     }
 
-    float threshold = DEFAULT_SKIN_THRESHOLD;
+    float threshold = 0.5;
     if (argc > 1) {
         threshold = std::stof(argv[1]);
         if (threshold < 0.0 || threshold > 1.0) {

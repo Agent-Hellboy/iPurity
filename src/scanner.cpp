@@ -19,6 +19,7 @@ const char* COLOR_GREEN = "\033[32m";
 const char* COLOR_RED = "\033[31m";
 const char* COLOR_RESET = "\033[0m";
 
+
 bool download_file(afc_client_t afc, const char* remotePath,
                    const char* localPath) {
     uint64_t fileRef = 0;
@@ -75,7 +76,8 @@ void process_image_file(AfcClientPool* pool, const char* fullPath,
 
     afc_client_t client = pool->acquire();
     if (download_file(client, fullPath, localFile.c_str())) {
-        bool isNSFW = naiveNSFWCheck(localFile, threshold);
+        NaiveNsfwScanner scanner;
+        bool isNSFW = scanner.scan(localFile, threshold);
         std::string message;
         {
             std::lock_guard<std::mutex> lock(statsMutex);
