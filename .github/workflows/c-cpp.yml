@@ -14,13 +14,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew update
-
           # Unlink bazelisk if present, to avoid conflicts
           brew unlink bazelisk || true
 
           # Install core libraries and Bazelisk (will pick up Bazel 7.4.1 per .bazelversion)
           brew install pkg-config opencv libimobiledevice libplist flatbuffers cmake make bazelisk
+
+      - name: Add Bazelisk to PATH
+        run: |
+          echo "$(brew --prefix bazelisk)/bin" >> $GITHUB_PATH
 
       - name: Clone TensorFlow
         run: |
