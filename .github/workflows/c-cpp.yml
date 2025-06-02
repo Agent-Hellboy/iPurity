@@ -16,11 +16,14 @@ jobs:
         run: |
           brew update
 
-          # Unlink bazelisk if present, to avoid conflicts with bazel
+          # Unlink bazelisk if present, to avoid conflicts
           brew unlink bazelisk || true
 
           # Core libraries
-          brew install pkg-config opencv libimobiledevice libplist flatbuffers cmake make bazel
+          brew install pkg-config opencv libimobiledevice libplist flatbuffers cmake make bazelisk
+
+          # Ensure bazelisk is in PATH as `bazel`
+          ln -sfn "$(brew --prefix bazelisk)/bin/bazelisk" /usr/local/bin/bazel
 
       - name: Clone TensorFlow
         run: |
@@ -31,7 +34,7 @@ jobs:
         run: |
           # Configure TensorFlow (defaults are fine for TFLite C++ build)
           yes "" | ./configure
-          # Build the TFLite C++ library
+          # Use bazelisk to fetch the correct Bazel version and build TFLite
           bazel build -c opt //tensorflow/lite:libtensorflowlite.dylib
 
       - name: Configure with CMake
