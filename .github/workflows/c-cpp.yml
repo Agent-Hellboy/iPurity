@@ -14,11 +14,15 @@ jobs:
 
       - name: Install dependencies
         run: |
+          brew update
+
           # Unlink bazelisk if present, to avoid conflicts
           brew unlink bazelisk || true
 
           # Install core libraries and Bazelisk (will pick up Bazel 7.4.1 per .bazelversion)
-          brew install pkg-config opencv libimobiledevice libplist flatbuffers cmake make bazelisk
+          # Note: we no longer install FlatBuffers via Homebrew, since TensorFlow Lite
+          # expects the version bundled under src/tensorflow/third_party/flatbuffers.
+          brew install pkg-config opencv libimobiledevice libplist cmake make bazelisk
 
       - name: Add Bazelisk to PATH
         run: |
@@ -45,6 +49,7 @@ jobs:
           cmake \
             -DTFLITE_INCLUDE_DIR=${{ github.workspace }}/src/tensorflow \
             -DTFLITE_LIB=${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib \
+            -DFLATBUFFERS_INCLUDE_DIR=${{ github.workspace }}/src/tensorflow/third_party/flatbuffers/include \
             -DIMOBILEDEVICE_INCLUDE_DIR=${BREW_PREFIX}/include \
             -DIMOBILEDEVICE_LIB=${BREW_PREFIX}/lib/libimobiledevice.dylib \
             -DPLIST_LIB=${BREW_PREFIX}/lib/libplist.dylib \
