@@ -29,7 +29,7 @@ bool download_file_to_buffer(afc_client_t afc, const char* remotePath, std::vect
         return false;
     }
     const size_t BUF_SIZE = 4096;
-    std::vector<uchar> temp(BUF_SIZE);
+    std::vector<char> temp(BUF_SIZE);
     uint32_t bytesRead = 0;
     while (true) {
         afc_error_t readErr = afc_file_read(afc, fileRef, temp.data(), BUF_SIZE, &bytesRead);

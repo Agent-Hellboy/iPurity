@@ -1,131 +1,171 @@
-#!/usr/bin/env bash
+cmake_minimum_required(VERSION 3.10)
+project(iPurity)
+
+# Require C++17
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# ----------------------------------------------------------------
+# 1. Find OpenCV
+# ----------------------------------------------------------------
+find_package(OpenCV REQUIRED)
+message(STATUS "→ OpenCV include dirs: ${OpenCV_INCLUDE_DIRS}")
+message(STATUS "→ OpenCV libraries:   ${OpenCV_LIBS}")
+
+# ----------------------------------------------------------------
+# 2. Find TensorFlow Lite
+# ----------------------------------------------------------------
+# We expect:
+#   • Bazel‐built: src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.so
+#   • Headers:     src/tensorflow/tensorflow/lite/interpreter.h (and friends)
 #
-# A simple "configure" script for Apple Silicon macOS
-# that checks for required dependencies:
-#   - pkg-config
-#   - OpenCV (via pkg-config)
-#   - libimobiledevice (via a compile test)
-#   - libplist (via a compile test)
+# Pass these explicitly if CMake can’t auto‐find:
+#   -DTFLITE_INCLUDE_DIR=/Users/agent-hellboy/iPurity/src/tensorflow
+#   -DTFLITE_LIB=/Users/agent-hellboy/iPurity/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.so
 #
-# Exits with an error if any dependency is missing.
-# Also creates unversioned symlinks for libimobiledevice/libplist if needed.
+find_path(
+    TFLITE_INCLUDE_DIR
+    NAMES tensorflow/lite/interpreter.h
+    PATHS
+      ${PROJECT_SOURCE_DIR}/src/tensorflow
+      /usr/local/include
+      /opt/homebrew/include
+      NO_DEFAULT_PATH
+)
+find_library(
+    TFLITE_LIB
+    NAMES tensorflow-lite tensorflowlite
+    PATHS
+      ${PROJECT_SOURCE_DIR}/src/tensorflow/bazel-bin/tensorflow/lite
+      /usr/local/lib
+      /opt/homebrew/lib
+      NO_DEFAULT_PATH
+)
 
-set -e  # Exit immediately on any error
+if (NOT TFLITE_INCLUDE_DIR OR NOT TFLITE_LIB)
+    message(FATAL_ERROR
+        "TensorFlow Lite not found!\n"
+        " • Build TFLite via Bazel:\n"
+        "     cd ${PROJECT_SOURCE_DIR}/src/tensorflow\n"
+        "     bazel build -c opt //tensorflow/lite:libtensorflowlite.so\n"
+        " • Then rerun CMake from project root with:\n"
+        "     -DTFLITE_INCLUDE_DIR=${PROJECT_SOURCE_DIR}/src/tensorflow \\\n"
+        "     -DTFLITE_LIB=${PROJECT_SOURCE_DIR}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.so \\\n"
+        "     -DCMAKE_BUILD_TYPE=Release"
+    )
+endif()
+message(STATUS "→ TFLite include dir: ${TFLITE_INCLUDE_DIR}")
+message(STATUS "→ TFLite library:    ${TFLITE_LIB}")
 
-echo "Running configure for Apple Silicon macOS..."
+# ----------------------------------------------------------------
+# 3. Find FlatBuffers (system‐wide via Homebrew)
+# ----------------------------------------------------------------
+# After `brew install flatbuffers`, headers live in:
+#   /usr/local/include/flatbuffers/flatbuffers.h    (Intel)
+#   /opt/homebrew/include/flatbuffers/flatbuffers.h (Apple Silicon)
+#
+find_path(
+    FLATBUFFERS_INCLUDE_DIR
+    NAMES flatbuffers/flatbuffers.h
+    PATHS
+      /usr/local/include
+      /opt/homebrew/include
+      NO_DEFAULT_PATH
+)
 
-###############################################################################
-# 1. Check Apple Silicon (arm64)
-###############################################################################
-ARCH=$(uname -m)
-if [ "$ARCH" != "arm64" ]; then
-  echo "Error: This configure script is for Apple Silicon (arm64) only."
-  echo "Detected architecture: $ARCH"
-  exit 1
-fi
-echo "Architecture: $ARCH (Apple Silicon)"
+if (NOT FLATBUFFERS_INCLUDE_DIR)
+    message(FATAL_ERROR
+        "FlatBuffers headers not found!\n"
+        " • Install via Homebrew: brew install flatbuffers\n"
+        " • After that, verify that:\n"
+        "     /usr/local/include/flatbuffers/flatbuffers.h  (Intel)\n"
+        "     or\n"
+        "     /opt/homebrew/include/flatbuffers/flatbuffers.h  (Apple Silicon)\n"
+    )
+endif()
+message(STATUS "→ FlatBuffers include dir: ${FLATBUFFERS_INCLUDE_DIR}")
 
-###############################################################################
-# 2. Check for pkg-config
-###############################################################################
-if ! command -v pkg-config &>/dev/null; then
-  echo "Error: 'pkg-config' not found. Please install it (e.g., brew install pkg-config)."
-  exit 1
-fi
-echo "pkg-config: found."
+# ----------------------------------------------------------------
+# 4. Find libimobiledevice and libplist
+# ----------------------------------------------------------------
+find_path(
+    IMOBILEDEVICE_INCLUDE_DIR
+    NAMES libimobiledevice/libimobiledevice.h
+    PATHS /usr/local/include /opt/homebrew/include NO_DEFAULT_PATH
+)
+find_library(
+    IMOBILEDEVICE_LIB
+    NAMES imobiledevice
+    PATHS /usr/local/lib /opt/homebrew/lib NO_DEFAULT_PATH
+)
+find_library(
+    PLIST_LIB
+    NAMES plist
+    PATHS /usr/local/lib /opt/homebrew/lib NO_DEFAULT_PATH
+)
 
-###############################################################################
-# 3. Check for OpenCV via pkg-config
-###############################################################################
-# We try opencv4 first or fallback to opencv.
-if ! pkg-config --exists opencv4 && ! pkg-config --exists opencv; then
-  echo "Error: OpenCV not found (pkg-config check failed)."
-  echo "       Install via Homebrew: brew install opencv"
-  exit 1
-fi
-echo "OpenCV: found."
+if (NOT IMOBILEDEVICE_INCLUDE_DIR OR NOT IMOBILEDEVICE_LIB OR NOT PLIST_LIB)
+    message(FATAL_ERROR
+        "libimobiledevice or libplist not found!\n"
+        " • Install via Homebrew: brew install libimobiledevice libplist"
+    )
+endif()
+message(STATUS "→ libimobiledevice include dir: ${IMOBILEDEVICE_INCLUDE_DIR}")
+message(STATUS "→ libimobiledevice lib:         ${IMOBILEDEVICE_LIB}")
+message(STATUS "→ libplist lib:                 ${PLIST_LIB}")
 
-###############################################################################
-# 4. Check for libimobiledevice
-###############################################################################
-# Many times, libimobiledevice doesn't ship a pkg-config file, so we do a compile test.
-TMPFILE=$(mktemp /tmp/check_imobile.XXXXXX.cpp)
-cat << EOF > "$TMPFILE"
-#include <libimobiledevice/libimobiledevice.h>
-int main() { return 0; }
-EOF
+# ----------------------------------------------------------------
+# 5. Define the iPurity executable
+# ----------------------------------------------------------------
+add_executable(iPurity
+    src/main.cpp
+    src/scanner.cpp
+    src/nsfw_detector.cpp
+    src/afc_client_pool.cpp
+    src/afc_helpers.cpp
+)
 
-# Attempt to compile it. For Apple Silicon, Homebrew is usually /opt/homebrew/include
-if ! g++ -I/opt/homebrew/include -c "$TMPFILE" -o /dev/null 2>/dev/null; then
-  echo "Error: Could not compile a test program with libimobiledevice."
-  echo "       Make sure libimobiledevice is installed: brew install libimobiledevice"
-  rm -f "$TMPFILE"
-  exit 1
-fi
-rm -f "$TMPFILE"
-echo "libimobiledevice: found."
+# ----------------------------------------------------------------
+# 6. Set include directories (in this order)
+# ----------------------------------------------------------------
+target_include_directories(iPurity PRIVATE
+    ${OpenCV_INCLUDE_DIRS}
+    ${TFLITE_INCLUDE_DIR}
+    ${FLATBUFFERS_INCLUDE_DIR}
+    ${IMOBILEDEVICE_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 
-###############################################################################
-# 5. Check for libplist
-###############################################################################
-# We'll do a similar compile test. The main header is <plist/plist.h>.
-TMPFILE=$(mktemp /tmp/check_plist.XXXXXX.cpp)
-cat << EOF > "$TMPFILE"
-#include <plist/plist.h>
-int main() {
-    plist_t p = plist_new_dict();
-    plist_free(p);
-    return 0;
-}
-EOF
+# ----------------------------------------------------------------
+# 7. Compiler warnings
+# ----------------------------------------------------------------
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(iPurity PRIVATE -Wall -Wextra)
+endif()
 
-if ! g++ -I/opt/homebrew/include -c "$TMPFILE" -o /dev/null 2>/dev/null; then
-  echo "Error: Could not compile a test program with libplist."
-  echo "       Make sure libplist is installed: brew install libplist"
-  rm -f "$TMPFILE"
-  exit 1
-fi
-rm -f "$TMPFILE"
-echo "libplist: found."
+# ----------------------------------------------------------------
+# 8. Link libraries
+# ----------------------------------------------------------------
+target_link_libraries(iPurity PRIVATE
+    ${OpenCV_LIBS}
+    ${TFLITE_LIB}
+    ${IMOBILEDEVICE_LIB}
+    ${PLIST_LIB}
+    "-framework Accelerate"   # TFLite on macOS needs Accelerate
+)
 
-###############################################################################
-# 6. Create Symlinks for Versioned .dylib Files (if needed)
-###############################################################################
-SYMLINK_DIR="/opt/homebrew/lib"
-
-if [ -d "$SYMLINK_DIR" ]; then
-  echo "Checking for versioned libraries in $SYMLINK_DIR..."
-
-  pushd "$SYMLINK_DIR" >/dev/null || exit 1
-
-  # Symlink for libimobiledevice (e.g. libimobiledevice-1.0.dylib → libimobiledevice.dylib)
-  IMOBILE=$(ls libimobiledevice-*.dylib 2>/dev/null | head -n 1)
-  if [[ -n "$IMOBILE" ]]; then
-    echo "Found $IMOBILE. Creating symlink libimobiledevice.dylib → $IMOBILE"
-    ln -sf "$IMOBILE" libimobiledevice.dylib
-  fi
-
-  # Symlink for libplist (non-++), e.g. libplist-2.0.dylib → libplist.dylib
-  PLIST=$(ls libplist-*.dylib 2>/dev/null | grep -v '++' | head -n 1)
-  if [[ -n "$PLIST" ]]; then
-    echo "Found $PLIST. Creating symlink libplist.dylib → $PLIST"
-    ln -sf "$PLIST" libplist.dylib
-  fi
-
-  # Symlink for libplist++ (C++ version), e.g. libplist++-2.0.dylib → libplist++.dylib
-  PLISTPP=$(ls libplist++-*.dylib 2>/dev/null | head -n 1)
-  if [[ -n "$PLISTPP" ]]; then
-    echo "Found $PLISTPP. Creating symlink libplist++.dylib → $PLISTPP"
-    ln -sf "$PLISTPP" libplist++.dylib
-  fi
-
-  popd >/dev/null
-fi
-
-###############################################################################
-# 7. Success
-###############################################################################
-echo "All checks passed for Apple Silicon macOS."
-echo "Unversioned symlinks created (if needed)."
-echo "You can now run 'make' or 'make all'."
-exit 0
+# ----------------------------------------------------------------
+# 9. Custom targets (configure, check, dist, install)
+# ----------------------------------------------------------------
+add_custom_target(configure
+    COMMAND ${CMAKE_COMMAND} -E echo "Ensure all dependencies are installed."
+)
+add_custom_target(check
+    COMMAND ${CMAKE_COMMAND} -E echo "No tests implemented."
+)
+add_custom_target(dist
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_SOURCE_DIR}/dist
+    COMMAND ${CMAKE_COMMAND} -E chdir ${PROJECT_SOURCE_DIR} /usr/bin/tar -czf dist/iPurity.tar.gz CMakeLists.txt LICENSE README.md configure include src
+    COMMENT "Creating distribution tarball..."
+)
+install(TARGETS iPurity RUNTIME DESTINATION bin)
