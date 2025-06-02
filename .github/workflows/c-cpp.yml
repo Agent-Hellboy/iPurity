@@ -15,6 +15,10 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
+
+          # Unlink bazelisk if present, to avoid conflicts with bazel
+          brew unlink bazelisk || true
+
           # Core libraries
           brew install pkg-config opencv libimobiledevice libplist flatbuffers cmake make bazel
 
