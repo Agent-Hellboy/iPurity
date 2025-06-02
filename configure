@@ -15,14 +15,6 @@ message(STATUS "→ OpenCV libraries:   ${OpenCV_LIBS}")
 # ----------------------------------------------------------------
 # 2. Find TensorFlow Lite
 # ----------------------------------------------------------------
-# We expect:
-#   • Bazel‐built: src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.so
-#   • Headers:     src/tensorflow/tensorflow/lite/interpreter.h (and friends)
-#
-# Pass these explicitly if CMake can’t auto‐find:
-#   -DTFLITE_INCLUDE_DIR=/Users/agent-hellboy/iPurity/src/tensorflow
-#   -DTFLITE_LIB=/Users/agent-hellboy/iPurity/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.so
-#
 find_path(
     TFLITE_INCLUDE_DIR
     NAMES tensorflow/lite/interpreter.h
@@ -58,16 +50,13 @@ message(STATUS "→ TFLite include dir: ${TFLITE_INCLUDE_DIR}")
 message(STATUS "→ TFLite library:    ${TFLITE_LIB}")
 
 # ----------------------------------------------------------------
-# 3. Find FlatBuffers (system‐wide via Homebrew)
+# 3. Find FlatBuffers (from Bazel’s external directory)
 # ----------------------------------------------------------------
-# After `brew install flatbuffers`, headers live in:
-#   /usr/local/include/flatbuffers/flatbuffers.h    (Intel)
-#   /opt/homebrew/include/flatbuffers/flatbuffers.h (Apple Silicon)
-#
 find_path(
     FLATBUFFERS_INCLUDE_DIR
     NAMES flatbuffers/flatbuffers.h
     PATHS
+      ${PROJECT_SOURCE_DIR}/src/tensorflow/bazel-bin/external/flatbuffers/include
       /usr/local/include
       /opt/homebrew/include
       NO_DEFAULT_PATH
@@ -76,11 +65,10 @@ find_path(
 if (NOT FLATBUFFERS_INCLUDE_DIR)
     message(FATAL_ERROR
         "FlatBuffers headers not found!\n"
-        " • Install via Homebrew: brew install flatbuffers\n"
-        " • After that, verify that:\n"
-        "     /usr/local/include/flatbuffers/flatbuffers.h  (Intel)\n"
-        "     or\n"
-        "     /opt/homebrew/include/flatbuffers/flatbuffers.h  (Apple Silicon)\n"
+        " • Ensure you have run:\n"
+        "     cd ${PROJECT_SOURCE_DIR}/src/tensorflow\n"
+        "     bazel build -c opt //tensorflow/lite:libtensorflowlite.so\n"
+        "   so that Bazel populates external/flatbuffers under bazel-bin, and then re-run CMake."
     )
 endif()
 message(STATUS "→ FlatBuffers include dir: ${FLATBUFFERS_INCLUDE_DIR}")

@@ -16,12 +16,11 @@ jobs:
         run: |
           brew update
 
-          # Unlink bazelisk if present, to avoid conflicts
+          # Unlink bazelisk if present
           brew unlink bazelisk || true
 
-          # Install core libraries and Bazelisk (will pick up Bazel 7.4.1 per .bazelversion)
-          # Note: we no longer install FlatBuffers via Homebrew, since TensorFlow Lite
-          # expects the version bundled under src/tensorflow/third_party/flatbuffers.
+          # Install core libraries and Bazelisk (picks up Bazel 7.4.1 per .bazelversion)
+          # We do NOT install system flatbuffers here (we’ll use the Bazel one).
           brew install pkg-config opencv libimobiledevice libplist cmake make bazelisk
 
       - name: Add Bazelisk to PATH
@@ -35,21 +34,27 @@ jobs:
       - name: Build TensorFlow Lite via Bazelisk
         working-directory: src/tensorflow
         run: |
-          # Configure TensorFlow (defaults are fine for TFLite C++ build)
+          # Configure TensorFlow with defaults (we only need the C++ TFLite build)
           yes "" | ./configure
-          # Use bazelisk (automatically downloads Bazel 7.4.1 per .bazelversion)
+          # Use bazelisk so it downloads Bazel 7.4.1 per .bazelversion
           bazelisk build -c opt //tensorflow/lite:libtensorflowlite.dylib
 
       - name: Configure with CMake
         run: |
           mkdir -p build
           cd build
-          # Determine Homebrew prefix (handles Intel vs. Apple Silicon)
+
+          # Determine the Bazel FlatBuffers path
+          # (this is where Bazel has pulled in the FlatBuffers headers)
+          FLAT_DIR="${{ github.workspace }}/src/tensorflow/bazel-bin/external/flatbuffers/include"
+
+          # Determine Homebrew prefix (for libimobiledevice/libplist)
           BREW_PREFIX=$(brew --prefix)
+
           cmake \
             -DTFLITE_INCLUDE_DIR=${{ github.workspace }}/src/tensorflow \
             -DTFLITE_LIB=${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib \
-            -DFLATBUFFERS_INCLUDE_DIR=${{ github.workspace }}/src/tensorflow/third_party/flatbuffers/include \
+            -DFLATBUFFERS_INCLUDE_DIR=${FLAT_DIR} \
             -DIMOBILEDEVICE_INCLUDE_DIR=${BREW_PREFIX}/include \
             -DIMOBILEDEVICE_LIB=${BREW_PREFIX}/lib/libimobiledevice.dylib \
             -DPLIST_LIB=${BREW_PREFIX}/lib/libplist.dylib \
