@@ -14,14 +14,26 @@ jobs:
 
       - name: Install dependencies
         run: |
-          brew install pkg-config opencv libimobiledevice libplist
+          brew update
+          # Core libraries
+          brew install pkg-config opencv libimobiledevice libplist flatbuffers cmake make bazel
+
+      - name: Build TensorFlow Lite via Bazel
+        working-directory: ./src/tensorflow
+        run: |
+          # Configure TensorFlow (defaults are fine for TFLite C++ build)
+          yes "" | ./configure
+          # Build the TFLite C++ library
+          bazel build -c opt //tensorflow/lite:libtensorflowlite.dylib
 
       - name: Configure with CMake
         run: |
-          ./configure
-          mkdir -p build
-          cd build
-          cmake ..
+          cd build || mkdir build && cd build
+          cmake \
+            -DTFLITE_INCLUDE_DIR=${{ github.workspace }}/src/tensorflow \
+            -DTFLITE_LIB=${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib \
+            -DCMAKE_BUILD_TYPE=Release \
+            ..
 
       - name: Build
         run: |
