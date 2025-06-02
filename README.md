@@ -18,9 +18,12 @@ Note: Tested only on Apple Silicon Mac
 
 ## Prerequisites
 
-- libimobiledevice
-- OpenCV    
-- Make 
+- libimobiledevice (C library and headers)
+- libplist
+- OpenCV (C++ library and headers)
+- TensorFlow Lite (C++ library and headers)
+- CMake
+- Make
 
 ## Installation
 
@@ -34,6 +37,7 @@ brew install agent-hellboy/homebrew-agent-hellboy-formula/ipurity
 ```
 
 ### Option 2: Build from Source
+
 ```bash
 ./configure
 mkdir build
@@ -41,6 +45,8 @@ cd build
 cmake ..
 cmake --build .
 ```
+
+If you see an error about missing dependencies, install the required library and try again.
 
 ### Installation
 ```bash
@@ -105,5 +111,6 @@ cmake -DCMAKE_CXX_FLAGS="-fsanitize=thread" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize
 ## License  
 
 iPurity is released under the MIT License.
+
 
 
