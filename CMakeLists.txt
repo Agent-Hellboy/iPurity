@@ -29,7 +29,6 @@ find_path(
       ${PROJECT_SOURCE_DIR}/src/tensorflow
       /usr/local/include
       /opt/homebrew/include
-      NO_DEFAULT_PATH
 )
 find_library(
     TFLITE_LIB
@@ -38,7 +37,6 @@ find_library(
       ${PROJECT_SOURCE_DIR}/src/tensorflow/bazel-bin/tensorflow/lite
       /usr/local/lib
       /opt/homebrew/lib
-      NO_DEFAULT_PATH
 )
 
 if (NOT TFLITE_INCLUDE_DIR OR NOT TFLITE_LIB)
@@ -46,16 +44,15 @@ if (NOT TFLITE_INCLUDE_DIR OR NOT TFLITE_LIB)
         "TensorFlow Lite not found!\n"
         " • Build TFLite via Bazel:\n"
         "     cd ${PROJECT_SOURCE_DIR}/src/tensorflow\n"
-        "     bazel build -c opt //tensorflow/lite:libtensorflowlite.so\n"
+        "     bazel build -c opt //tensorflow/lite:libtensorflowlite.so (or .dylib)\n"
         " • Then rerun CMake from project root with:\n"
         "     -DTFLITE_INCLUDE_DIR=${PROJECT_SOURCE_DIR}/src/tensorflow \\\n"
-        "     -DTFLITE_LIB=${PROJECT_SOURCE_DIR}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.so \\\n"
+        "     -DTFLITE_LIB=${PROJECT_SOURCE_DIR}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib \\\n"
         "     -DCMAKE_BUILD_TYPE=Release"
     )
 endif()
 message(STATUS "→ TFLite include dir: ${TFLITE_INCLUDE_DIR}")
 message(STATUS "→ TFLite library:    ${TFLITE_LIB}")
-
 
 # ----------------------------------------------------------------
 # 3. Find FlatBuffers – prefer Bazel’s copy (so it matches TFLite v24)
@@ -64,57 +61,85 @@ message(STATUS "→ TFLite library:    ${TFLITE_LIB}")
 #   <TF-SRC>/bazel-bin/external/flatbuffers/include/flatbuffers/flatbuffers.h
 #
 # Assume CMakeLists.txt is in project root, and TFLite was built via Bazel
-set(FLAT_CANDIDATE1
-    "${CMAKE_SOURCE_DIR}/src/tensorflow/bazel-bin/external/flatbuffers/include/flatbuffers/flatbuffers.h"
-    )
-if (EXISTS "${FLAT_CANDIDATE1}")
-    # Remove “/flatbuffers/flatbuffers.h” to point FLATBUFFERS_INCLUDE_DIR at “…/include”
-    get_filename_component(FLATBUFFERS_INCLUDE_DIR "${FLAT_CANDIDATE1}" DIRECTORY)
-    message(STATUS "→ Using Bazel’s FlatBuffers headers: ${FLATBUFFERS_INCLUDE_DIR}")
+if (NOT FLATBUFFERS_INCLUDE_DIR)
+  set(FLAT_CANDIDATE1
+      "${CMAKE_SOURCE_DIR}/src/tensorflow/bazel-bin/external/flatbuffers/include/flatbuffers/flatbuffers.h"
+  )
+  if (EXISTS "${FLAT_CANDIDATE1}")
+      # Remove “/flatbuffers/flatbuffers.h” to point FLATBUFFERS_INCLUDE_DIR at “…/include”
+      get_filename_component(FLATBUFFERS_INCLUDE_DIR "${FLAT_CANDIDATE1}" DIRECTORY)
+      message(STATUS "→ Using Bazel’s FlatBuffers headers: ${FLATBUFFERS_INCLUDE_DIR}")
+  else()
+      # Fallback: check for Homebrew‐installed FlatBuffers v24 (Intel or Apple Silicon)
+      find_path(
+          FLATBUFFERS_INCLUDE_DIR
+          NAMES flatbuffers/flatbuffers.h
+          PATHS /usr/local/include /opt/homebrew/include
+      )
+      if (NOT FLATBUFFERS_INCLUDE_DIR)
+          message(FATAL_ERROR
+              "FlatBuffers headers not found!\n"
+              "  • Bazel’s copy (expected at ${CMAKE_SOURCE_DIR}/src/tensorflow/bazel-bin/external/flatbuffers/include/flatbuffers/flatbuffers.h) is missing.\n"
+              "  • Or Homebrew copy not found. Please run:\n"
+              "      brew install flatbuffers@24\n"
+              "    (or copy Bazel’s FlatBuffers into /usr/local/include/flatbuffers)."
+          )
+      endif()
+      message(STATUS "→ Using system FlatBuffers headers: ${FLATBUFFERS_INCLUDE_DIR}")
+  endif()
 else()
-    # Fallback: check for Homebrew‐installed FlatBuffers v24 (Intel or Apple Silicon)
-    find_path(
-        FLATBUFFERS_INCLUDE_DIR
-        NAMES flatbuffers/flatbuffers.h
-        PATHS /usr/local/include /opt/homebrew/include
-        NO_DEFAULT_PATH
-    )
-    if (NOT FLATBUFFERS_INCLUDE_DIR)
-        message(FATAL_ERROR
-            "FlatBuffers headers not found!\n"
-            "  • Bazel’s copy (expected at ${CMAKE_SOURCE_DIR}/src/tensorflow/bazel-bin/external/flatbuffers/include/flatbuffers/flatbuffers.h) is missing.\n"
-            "  • Or Homebrew copy not found. Please run:\n"
-            "      brew install flatbuffers@24\n"
-            "    (or copy Bazel’s FlatBuffers into /usr/local/include/flatbuffers)."
-        )
-    endif()
-    message(STATUS "→ Using system FlatBuffers headers: ${FLATBUFFERS_INCLUDE_DIR}")
+  message(STATUS "→ Using user-provided FlatBuffers headers: ${FLATBUFFERS_INCLUDE_DIR}")
 endif()
+
 # ----------------------------------------------------------------
 # 4. Find libimobiledevice and libplist
 # ----------------------------------------------------------------
-find_path(
+# Allow these to be overridden on the command line:
+if (NOT DEFINED IMOBILEDEVICE_INCLUDE_DIR)
+  set(IMOBILEDEVICE_INCLUDE_DIR "" CACHE PATH "Path to libimobiledevice headers")
+endif()
+if (NOT DEFINED IMOBILEDEVICE_LIB)
+  set(IMOBILEDEVICE_LIB "" CACHE FILEPATH "Path to libimobiledevice library")
+endif()
+if (NOT DEFINED PLIST_LIB)
+  set(PLIST_LIB "" CACHE FILEPATH "Path to libplist library")
+endif()
+
+if (NOT IMOBILEDEVICE_INCLUDE_DIR)
+  find_path(
     IMOBILEDEVICE_INCLUDE_DIR
-    NAMES libimobiledevice/libimobiledevice.h
-    PATHS /usr/local/include /opt/homebrew/include NO_DEFAULT_PATH
-)
-find_library(
+    NAMES libimobiledevice/afc.h
+    PATHS /usr/local/include /opt/homebrew/include
+  )
+endif()
+
+if (NOT IMOBILEDEVICE_LIB)
+  find_library(
     IMOBILEDEVICE_LIB
     NAMES imobiledevice
-    PATHS /usr/local/lib /opt/homebrew/lib NO_DEFAULT_PATH
-)
-find_library(
+    PATHS /usr/local/lib /opt/homebrew/lib
+  )
+endif()
+
+if (NOT PLIST_LIB)
+  find_library(
     PLIST_LIB
     NAMES plist
-    PATHS /usr/local/lib /opt/homebrew/lib NO_DEFAULT_PATH
-)
+    PATHS /usr/local/lib /opt/homebrew/lib
+  )
+endif()
 
 if (NOT IMOBILEDEVICE_INCLUDE_DIR OR NOT IMOBILEDEVICE_LIB OR NOT PLIST_LIB)
     message(FATAL_ERROR
         "libimobiledevice or libplist not found!\n"
-        " • Install via Homebrew: brew install libimobiledevice libplist"
+        " • Install via Homebrew: brew install libimobiledevice libplist\n"
+        " • Or specify paths explicitly when invoking CMake:\n"
+        "     -DIMOBILEDEVICE_INCLUDE_DIR=<path-to-include> \\\n"
+        "     -DIMOBILEDEVICE_LIB=<path-to-libimobiledevice.dylib> \\\n"
+        "     -DPLIST_LIB=<path-to-libplist.dylib>"
     )
 endif()
+
 message(STATUS "→ libimobiledevice include dir: ${IMOBILEDEVICE_INCLUDE_DIR}")
 message(STATUS "→ libimobiledevice lib:         ${IMOBILEDEVICE_LIB}")
 message(STATUS "→ libplist lib:                 ${PLIST_LIB}")
