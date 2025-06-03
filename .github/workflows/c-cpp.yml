@@ -20,8 +20,21 @@ jobs:
           brew unlink bazelisk || true
 
           # Install core libraries and Bazelisk (picks up Bazel 7.4.1 per .bazelversion)
-          # We do NOT install system flatbuffers here (we’ll use the Bazel one).
+          # We do NOT install system flatbuffers here (we'll build v24.3.25 manually).
           brew install pkg-config opencv libimobiledevice libplist cmake make bazelisk
+
+      - name: Build & install FlatBuffers v24.3.25
+        run: |
+          # Clone FlatBuffers and check out the matching v24.3.25 tag
+          git clone https://github.com/google/flatbuffers.git flatbuffers_src
+          cd flatbuffers_src
+          git checkout v24.3.25
+
+          # Configure, build, and install into /usr/local
+          mkdir build && cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+          cmake --build . --target install
+        # 'sudo' is not needed on GitHub macOS runners when installing to /usr/local
 
       - name: Add Bazelisk to PATH
         run: |
@@ -44,17 +57,13 @@ jobs:
           mkdir -p build
           cd build
 
-          # Determine the Bazel FlatBuffers path
-          # (this is where Bazel has pulled in the FlatBuffers headers)
-          FLAT_DIR="${{ github.workspace }}/src/tensorflow/bazel-bin/external/flatbuffers/include"
-
-          # Determine Homebrew prefix (for libimobiledevice/libplist)
+          # Homebrew prefix for libimobiledevice/libplist
           BREW_PREFIX=$(brew --prefix)
 
           cmake \
             -DTFLITE_INCLUDE_DIR=${{ github.workspace }}/src/tensorflow \
             -DTFLITE_LIB=${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib \
-            -DFLATBUFFERS_INCLUDE_DIR=${FLAT_DIR} \
+            -DFLATBUFFERS_INCLUDE_DIR=/usr/local/include \
             -DIMOBILEDEVICE_INCLUDE_DIR=${BREW_PREFIX}/include \
             -DIMOBILEDEVICE_LIB=${BREW_PREFIX}/lib/libimobiledevice.dylib \
             -DPLIST_LIB=${BREW_PREFIX}/lib/libplist.dylib \
