@@ -16,33 +16,33 @@ jobs:
         run: |
           brew update
 
-          # Unlink bazelisk if present
+          # Unlink bazelisk if present (to avoid conflicts)
           brew unlink bazelisk || true
 
-          # Install core libraries and Bazelisk (picks up Bazel 7.4.1 per .bazelversion)
+          # Install core libraries + Bazelisk (pulls in Bazel 7.4.1 via .bazelversion)
+          # We do NOT install system‐wide flatbuffers here (we'll use the Bazel‐provided one).
           brew install pkg-config opencv libimobiledevice libplist cmake make bazelisk
 
       - name: Build & “private‐install” FlatBuffers v24.3.25
         run: |
-          # Clone FlatBuffers and check out v24.3.25
+          # Clone FlatBuffers, check out exactly v24.3.25, install into a private prefix
           git clone https://github.com/google/flatbuffers.git flatbuffers_src
           cd flatbuffers_src
           git checkout v24.3.25
 
-          # Create a private install prefix under $GITHUB_WORKSPACE
+          # Create a “flatbuffers_install” folder under our workspace
           INSTALL_DIR="${{ github.workspace }}/flatbuffers_install"
           mkdir -p build && cd build
 
-          # Configure so that “make install” writes into our private INSTALL_DIR
+          # Configure so that `make install` writes into INSTALL_DIR
           cmake -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
                 ..
           cmake --build . --target install
 
-          # At this point, FlatBuffers headers live in:
-          #    $GITHUB_WORKSPACE/flatbuffers_install/include/flatbuffers/flatbuffers.h
-          # and the static library (libflatbuffers.a) lives in:
-          #    $GITHUB_WORKSPACE/flatbuffers_install/lib/libflatbuffers.a
+          # After this, you should see:
+          #   • ${INSTALL_DIR}/include/flatbuffers/flatbuffers.h
+          #   • ${INSTALL_DIR}/lib/libflatbuffers.a
 
       - name: Add Bazelisk to PATH
         run: |
@@ -55,9 +55,10 @@ jobs:
       - name: Build TensorFlow Lite via Bazelisk
         working-directory: src/tensorflow
         run: |
-          # Use defaults for configure (we only need the C++ TFLite build)
+          # Use defaults for configure; we only care about the C++ TFLite target
           yes "" | ./configure
-          # bazelisk will download Bazel 7.4.1 per the .bazelversion
+
+          # bazelisk will fetch Bazel 7.4.1 per .bazelversion automatically
           bazelisk build -c opt //tensorflow/lite:libtensorflowlite.dylib
 
       - name: Configure with CMake
@@ -65,19 +66,18 @@ jobs:
           mkdir -p build
           cd build
 
-          # “private” FlatBuffers include directory:
-          FB_INCLUDE="${{ github.workspace }}/flatbuffers_install/include"
-          # Homebrew prefix for libimobiledevice / libplist
-          BREW_PREFIX=$(brew --prefix)
+          # Grab the FlatBuffers include path from our private install:
+          FLAT_DIR="${{ github.workspace }}/flatbuffers_install/include"
 
+          # Now invoke CMake.  We explicitly pass:
+          #   ‣ TFLITE_INCLUDE_DIR   → TensorFlow source root (so interpreter.h is found)
+          #   ‣ TFLITE_LIB           → Bazel‐built libtensorflowlite.dylib
+          #   ‣ FLATBUFFERS_INCLUDE_DIR → our private FlatBuffers install
+          # We do NOT pass IMOBILEDEVICE_* or PLIST_* here; CMakeLists will find them on its own.
           cmake \
-            -DTFLITE_INCLUDE_DIR=${{ github.workspace }}/src/tensorflow \
-            -DTFLITE_LIB=${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib \
-            -DFLATBUFFERS_INCLUDE_DIR="${FB_INCLUDE}" \
-            -DIMOBILEDEVICE_INCLUDE_DIR="${BREW_PREFIX}/include" \
-            -DIMOBILEDEVICE_LIB="${BREW_PREFIX}/lib/libimobiledevice.dylib" \
-            -DPLIST_LIB="${BREW_PREFIX}/lib/libplist.dylib" \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DTFLITE_INCLUDE_DIR="${{ github.workspace }}/src/tensorflow" \
+            -DTFLITE_LIB="${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib" \
+            -DFLATBUFFERS_INCLUDE_DIR="${FLAT_DIR}" \
             ..
 
       - name: Build
@@ -85,11 +85,12 @@ jobs:
           cd build
           cmake --build .
 
+      # (Optional) Add tests/dist targets if you have them:
       # - name: Test
       #   run: |
       #     cd build
       #     cmake --build . --target check
-
+      #
       # - name: Dist Check
       #   run: |
       #     cd build
