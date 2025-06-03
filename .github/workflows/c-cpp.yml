@@ -20,21 +20,29 @@ jobs:
           brew unlink bazelisk || true
 
           # Install core libraries and Bazelisk (picks up Bazel 7.4.1 per .bazelversion)
-          # We do NOT install system flatbuffers here (we'll build v24.3.25 manually).
           brew install pkg-config opencv libimobiledevice libplist cmake make bazelisk
 
-      - name: Build & install FlatBuffers v24.3.25
+      - name: Build & “private‐install” FlatBuffers v24.3.25
         run: |
-          # Clone FlatBuffers and check out the matching v24.3.25 tag
+          # Clone FlatBuffers and check out v24.3.25
           git clone https://github.com/google/flatbuffers.git flatbuffers_src
           cd flatbuffers_src
           git checkout v24.3.25
 
-          # Configure, build, and install into /usr/local
-          mkdir build && cd build
-          cmake -DCMAKE_BUILD_TYPE=Release ..
+          # Create a private install prefix under $GITHUB_WORKSPACE
+          INSTALL_DIR="${{ github.workspace }}/flatbuffers_install"
+          mkdir -p build && cd build
+
+          # Configure so that “make install” writes into our private INSTALL_DIR
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+                ..
           cmake --build . --target install
-        # 'sudo' is not needed on GitHub macOS runners when installing to /usr/local
+
+          # At this point, FlatBuffers headers live in:
+          #    $GITHUB_WORKSPACE/flatbuffers_install/include/flatbuffers/flatbuffers.h
+          # and the static library (libflatbuffers.a) lives in:
+          #    $GITHUB_WORKSPACE/flatbuffers_install/lib/libflatbuffers.a
 
       - name: Add Bazelisk to PATH
         run: |
@@ -47,9 +55,9 @@ jobs:
       - name: Build TensorFlow Lite via Bazelisk
         working-directory: src/tensorflow
         run: |
-          # Configure TensorFlow with defaults (we only need the C++ TFLite build)
+          # Use defaults for configure (we only need the C++ TFLite build)
           yes "" | ./configure
-          # Use bazelisk so it downloads Bazel 7.4.1 per .bazelversion
+          # bazelisk will download Bazel 7.4.1 per the .bazelversion
           bazelisk build -c opt //tensorflow/lite:libtensorflowlite.dylib
 
       - name: Configure with CMake
@@ -57,16 +65,18 @@ jobs:
           mkdir -p build
           cd build
 
-          # Homebrew prefix for libimobiledevice/libplist
+          # “private” FlatBuffers include directory:
+          FB_INCLUDE="${{ github.workspace }}/flatbuffers_install/include"
+          # Homebrew prefix for libimobiledevice / libplist
           BREW_PREFIX=$(brew --prefix)
 
           cmake \
             -DTFLITE_INCLUDE_DIR=${{ github.workspace }}/src/tensorflow \
             -DTFLITE_LIB=${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib \
-            -DFLATBUFFERS_INCLUDE_DIR=/usr/local/include \
-            -DIMOBILEDEVICE_INCLUDE_DIR=${BREW_PREFIX}/include \
-            -DIMOBILEDEVICE_LIB=${BREW_PREFIX}/lib/libimobiledevice.dylib \
-            -DPLIST_LIB=${BREW_PREFIX}/lib/libplist.dylib \
+            -DFLATBUFFERS_INCLUDE_DIR="${FB_INCLUDE}" \
+            -DIMOBILEDEVICE_INCLUDE_DIR="${BREW_PREFIX}/include" \
+            -DIMOBILEDEVICE_LIB="${BREW_PREFIX}/lib/libimobiledevice.dylib" \
+            -DPLIST_LIB="${BREW_PREFIX}/lib/libplist.dylib" \
             -DCMAKE_BUILD_TYPE=Release \
             ..
 
