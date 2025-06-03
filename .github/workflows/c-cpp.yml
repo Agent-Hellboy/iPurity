@@ -78,6 +78,9 @@ jobs:
             -DTFLITE_INCLUDE_DIR="${{ github.workspace }}/src/tensorflow" \
             -DTFLITE_LIB="${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib" \
             -DFLATBUFFERS_INCLUDE_DIR="${FLAT_DIR}" \
+            -DIMOBILEDEVICE_INCLUDE_DIR="${BREW_PREFIX}/include" \
+            -DIMOBILEDEVICE_LIB="${BREW_PREFIX}/lib/libimobiledevice.dylib" \
+            -DPLIST_LIB="${BREW_PREFIX}/lib/libplist.dylib" \
             ..
 
       - name: Build
