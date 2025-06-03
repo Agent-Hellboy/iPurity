@@ -40,15 +40,15 @@ jobs:
           cd flatbuffers_src
           git checkout v24.3.25
 
-          INSTALL_DIR="${{ github.workspace }}/flatbuffers_install"
-          echo " → Installing FlatBuffers into: ${INSTALL_DIR}"
+          INSTALL_DIR="${GITHUB_WORKSPACE}/flatbuffers_install"
+          echo "→ Installing FlatBuffers into: ${INSTALL_DIR}"
           mkdir -p build && cd build
 
-          echo " → Running cmake for FlatBuffers"
+          echo "→ Running cmake for FlatBuffers"
           cmake -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
                 ..
-          echo " → Building and installing FlatBuffers"
+          echo "→ Building and installing FlatBuffers"
           cmake --build . --target install
 
           echo "==== FlatBuffers install complete ===="
@@ -66,7 +66,7 @@ jobs:
         run: |
           echo "==== Cloning TensorFlow repository ===="
           git clone https://github.com/tensorflow/tensorflow.git src/tensorflow
-          ls -R src/tensorflow | head -n 50
+          ls -R "${GITHUB_WORKSPACE}/src/tensorflow" | head -n 50
 
       - name: Build TensorFlow Lite via Bazelisk (with debug)
         working-directory: src/tensorflow
@@ -85,7 +85,6 @@ jobs:
           echo "TF_NEED_TENSORRT=${TF_NEED_TENSORRT}"
 
           echo "==== Running TensorFlow's ./configure script ===="
-          # Use yes "" to accept defaults for any prompts
           yes "" | ./configure 2>&1 | tee configure.log
 
           echo "==== Contents of configure.log ===="
@@ -94,8 +93,8 @@ jobs:
           echo "==== Starting Bazel build for TensorFlow Lite ===="
           bazelisk build -c opt //tensorflow/lite:libtensorflowlite.dylib 2>&1 | tee tflite_build.log
 
-          echo "==== Bazel build artifacts under src/tensorflow/bazel-bin/tensorflow/lite ===="
-          ls src/tensorflow/bazel-bin/tensorflow/lite
+          echo "==== Bazel build artifacts under $GITHUB_WORKSPACE/src/tensorflow/bazel-bin/tensorflow/lite ===="
+          ls "${GITHUB_WORKSPACE}/src/tensorflow/bazel-bin/tensorflow/lite" || echo "   (no bazel-bin/tensorflow/lite directory yet)"
 
       - name: Configure with CMake (with debug echos)
         run: |
@@ -103,10 +102,10 @@ jobs:
           mkdir -p build
           cd build
           pwd
-          ls -la ..
+          ls -la "${GITHUB_WORKSPACE}"
 
           # Grab the FlatBuffers include path from our private install:
-          FLAT_DIR="${{ github.workspace }}/flatbuffers_install/include"
+          FLAT_DIR="${GITHUB_WORKSPACE}/flatbuffers_install/include"
           echo "→ FLATBUFFERS_INCLUDE_DIR = ${FLAT_DIR}"
           ls "${FLAT_DIR}" || echo "   (flatbuffers include dir missing)"
 
@@ -141,8 +140,8 @@ jobs:
 
           # Print the exact paths being passed to CMake
           echo "==== CMake variables ===="
-          echo "TFLITE_INCLUDE_DIR         = ${{ github.workspace }}/src/tensorflow"
-          echo "TFLITE_LIB                 = ${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib"
+          echo "TFLITE_INCLUDE_DIR         = ${GITHUB_WORKSPACE}/src/tensorflow"
+          echo "TFLITE_LIB                 = ${GITHUB_WORKSPACE}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib"
           echo "FLATBUFFERS_INCLUDE_DIR    = ${FLAT_DIR}"
           echo "IMOBILEDEVICE_INCLUDE_DIR  = ${BREW_PREFIX}/include"
           echo "IMOBILEDEVICE_LIB          = ${BREW_PREFIX}/lib/libimobiledevice.dylib"
@@ -150,8 +149,8 @@ jobs:
 
           echo "==== Running CMake configure ===="
           cmake \
-            -DTFLITE_INCLUDE_DIR="${{ github.workspace }}/src/tensorflow" \
-            -DTFLITE_LIB="${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib" \
+            -DTFLITE_INCLUDE_DIR="${GITHUB_WORKSPACE}/src/tensorflow" \
+            -DTFLITE_LIB="${GITHUB_WORKSPACE}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib" \
             -DFLATBUFFERS_INCLUDE_DIR="${FLAT_DIR}" \
             -DIMOBILEDEVICE_INCLUDE_DIR="${BREW_PREFIX}/include" \
             -DIMOBILEDEVICE_LIB="${BREW_PREFIX}/lib/libimobiledevice.dylib" \
