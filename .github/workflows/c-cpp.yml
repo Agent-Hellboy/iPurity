@@ -9,57 +9,162 @@ on:
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
+          echo "==== brew update ===="
           brew update
 
-          # Unlink bazelisk if present, to avoid conflicts with bazel
+          echo "==== Unlink bazelisk if present ===="
           brew unlink bazelisk || true
 
-          # Core libraries
-          brew install pkg-config opencv libimobiledevice libplist flatbuffers cmake make bazel
+          echo "==== Install core libraries ===="
+          brew install pkg-config opencv libimobiledevice libplist cmake make bazelisk
+
+          echo "==== Installed versions ===="
+          echo "pkg-config version: $(pkg-config --version)"
+          echo "opencv version (pkg-config): $(pkg-config --modversion opencv4 || pkg-config --modversion opencv)"
+          echo "libimobiledevice include dir: $(ls /usr/local/include/libimobiledevice 2>/dev/null || ls /opt/homebrew/include/libimobiledevice 2>/dev/null)"
+          echo "libplist include dir: $(ls /usr/local/include/plist 2>/dev/null || ls /opt/homebrew/include/plist 2>/dev/null)"
+          echo "cmake version: $(cmake --version)"
+          echo "bazelisk version: $(bazelisk version)"
+
+      - name: Build & “private-install” FlatBuffers v24.3.25
+        run: |
+          echo "==== Cloning FlatBuffers v24.3.25 ===="
+          git clone https://github.com/google/flatbuffers.git flatbuffers_src
+          cd flatbuffers_src
+          git checkout v24.3.25
+
+          INSTALL_DIR="${GITHUB_WORKSPACE}/flatbuffers_install"
+          echo "→ Installing FlatBuffers into: ${INSTALL_DIR}"
+          mkdir -p build && cd build
+
+          echo "→ Running cmake for FlatBuffers"
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+                ..
+          echo "→ Building and installing FlatBuffers"
+          cmake --build . --target install
+
+          echo "==== FlatBuffers install complete ===="
+          ls -R "${INSTALL_DIR}/include/flatbuffers"
+          ls -R "${INSTALL_DIR}/lib"
+
+      - name: Add Bazelisk to PATH
+        run: |
+          BREW_BAZELISK="$(brew --prefix bazelisk)"
+          echo "→ brew prefix for bazelisk: ${BREW_BAZELISK}"
+          echo "${BREW_BAZELISK}/bin" >> $GITHUB_PATH
+          echo "→ Updated PATH: $PATH"
 
       - name: Clone TensorFlow
         run: |
+          echo "==== Cloning TensorFlow repository ===="
           git clone https://github.com/tensorflow/tensorflow.git src/tensorflow
+          ls -R "${GITHUB_WORKSPACE}/src/tensorflow" | head -n 50
 
-      - name: Build TensorFlow Lite via Bazel
+      - name: Build TensorFlow Lite via Bazelisk (with debug)
         working-directory: src/tensorflow
+        env:
+          TF_NEED_CUDA: 0
+          TF_NEED_ROCM: 0
+          TF_NEED_OPENCL_SYCL: 0
+          TF_ENABLE_XLA: 0
+          TF_NEED_TENSORRT: 0
         run: |
-          # Configure TensorFlow (defaults are fine for TFLite C++ build)
-          yes "" | ./configure
-          # Build the TFLite C++ library
-          bazel build -c opt //tensorflow/lite:libtensorflowlite.dylib
+          echo "==== TensorFlow configure environment variables ===="
+          echo "TF_NEED_CUDA=${TF_NEED_CUDA}"
+          echo "TF_NEED_ROCM=${TF_NEED_ROCM}"
+          echo "TF_NEED_OPENCL_SYCL=${TF_NEED_OPENCL_SYCL}"
+          echo "TF_ENABLE_XLA=${TF_ENABLE_XLA}"
+          echo "TF_NEED_TENSORRT=${TF_NEED_TENSORRT}"
 
-      - name: Configure with CMake
+          echo "==== Running TensorFlow's ./configure script ===="
+          yes "" | ./configure 2>&1 | tee configure.log
+
+          echo "==== Contents of configure.log ===="
+          head -n 200 configure.log
+
+          echo "==== Starting Bazel build for TensorFlow Lite ===="
+          bazelisk build -c opt //tensorflow/lite:libtensorflowlite.dylib 2>&1 | tee tflite_build.log
+
+          echo "==== Bazel build artifacts under $GITHUB_WORKSPACE/src/tensorflow/bazel-bin/tensorflow/lite ===="
+          ls "${GITHUB_WORKSPACE}/src/tensorflow/bazel-bin/tensorflow/lite" || echo "   (no bazel-bin/tensorflow/lite directory yet)"
+
+      - name: Configure with CMake (with debug echos)
         run: |
+          echo "==== Entering build directory ===="
           mkdir -p build
           cd build
-          # Determine Homebrew prefix (handles both Intel and Apple Silicon)
-          BREW_PREFIX=$(brew --prefix)
+          pwd
+          ls -la "${GITHUB_WORKSPACE}"
+
+          # Grab the FlatBuffers include path from our private install:
+          FLAT_DIR="${GITHUB_WORKSPACE}/flatbuffers_install/include"
+          echo "→ FLATBUFFERS_INCLUDE_DIR = ${FLAT_DIR}"
+          ls "${FLAT_DIR}" || echo "   (flatbuffers include dir missing)"
+
+          # Determine Brew prefix and dump it
+          BREW_PREFIX="$(brew --prefix)"
+          echo "→ BREW_PREFIX = ${BREW_PREFIX}"
+          echo "→ ls ${BREW_PREFIX}/include:"
+          ls "${BREW_PREFIX}/include" || echo "   (no include directory?)"
+
+          # Check that libimobiledevice headers actually exist
+          echo "→ ls ${BREW_PREFIX}/include/libimobiledevice:"
+          ls "${BREW_PREFIX}/include/libimobiledevice" || echo "   (no libimobiledevice directory)"
+
+          # Check that afc.h is present
+          echo "→ file ${BREW_PREFIX}/include/libimobiledevice/afc.h:"
+          if [ -f "${BREW_PREFIX}/include/libimobiledevice/afc.h" ]; then
+            echo "   OK: afc.h exists"
+          else
+            echo "   MISSING: afc.h not found"
+          fi
+
+          # Check for libimobiledevice dylib symlink and versioned file
+          echo "→ ls ${BREW_PREFIX}/lib/libimobiledevice*.dylib:"
+          ls "${BREW_PREFIX}/lib/libimobiledevice"*.dylib || echo "   (no libimobiledevice*.dylib found)"
+
+          # Check for libplist headers and dylib
+          echo "→ ls ${BREW_PREFIX}/include/plist:"
+          ls "${BREW_PREFIX}/include/plist" || echo "   (no plist directory)"
+
+          echo "→ ls ${BREW_PREFIX}/lib/libplist*.dylib:"
+          ls "${BREW_PREFIX}/lib/libplist"*.dylib || echo "   (no libplist*.dylib found)"
+
+          # Print the exact paths being passed to CMake
+          echo "==== CMake variables ===="
+          echo "TFLITE_INCLUDE_DIR         = ${GITHUB_WORKSPACE}/src/tensorflow"
+          echo "TFLITE_LIB                 = ${GITHUB_WORKSPACE}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib"
+          echo "FLATBUFFERS_INCLUDE_DIR    = ${FLAT_DIR}"
+          echo "IMOBILEDEVICE_INCLUDE_DIR  = ${BREW_PREFIX}/include"
+          echo "IMOBILEDEVICE_LIB          = ${BREW_PREFIX}/lib/libimobiledevice.dylib"
+          echo "PLIST_LIB                  = ${BREW_PREFIX}/lib/libplist.dylib"
+
+          echo "==== Running CMake configure ===="
           cmake \
-            -DTFLITE_INCLUDE_DIR=${{ github.workspace }}/src/tensorflow \
-            -DTFLITE_LIB=${{ github.workspace }}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib \
-            -DIMOBILEDEVICE_INCLUDE_DIR=${BREW_PREFIX}/include \
-            -DIMOBILEDEVICE_LIB=${BREW_PREFIX}/lib/libimobiledevice.dylib \
-            -DPLIST_LIB=${BREW_PREFIX}/lib/libplist.dylib \
-            -DCMAKE_BUILD_TYPE=Release \
-            ..
+            -DTFLITE_INCLUDE_DIR="${GITHUB_WORKSPACE}/src/tensorflow" \
+            -DTFLITE_LIB="${GITHUB_WORKSPACE}/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib" \
+            -DFLATBUFFERS_INCLUDE_DIR="${FLAT_DIR}" \
+            -DIMOBILEDEVICE_INCLUDE_DIR="${BREW_PREFIX}/include" \
+            -DIMOBILEDEVICE_LIB="${BREW_PREFIX}/lib/libimobiledevice.dylib" \
+            -DPLIST_LIB="${BREW_PREFIX}/lib/libplist.dylib" \
+            .. 2>&1 | tee cmake_configure.log
 
-      - name: Build
+          echo "==== Contents of cmake_configure.log ===="
+          head -n 200 cmake_configure.log
+
+      - name: Build the project
         run: |
+          echo "==== Starting CMake build ===="
           cd build
-          cmake --build .
+          cmake --build . 2>&1 | tee cmake_build.log
 
-      # - name: Test
-      #   run: |
-      #     cd build
-      #     cmake --build . --target check
-
-      # - name: Dist Check
-      #   run: |
-      #     cd build
-      #     cmake --build . --target distcheck
+          echo "==== Build output summary ===="
+          tail -n 50 cmake_build.log
