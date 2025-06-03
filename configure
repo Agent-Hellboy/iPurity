@@ -93,78 +93,84 @@ echo "libplist: found."
 ###############################################################################
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
-# 6a. Header checks
+# 6a. Header checks - check system locations first
 TFLITE_HDR_SYSTEM1="/usr/local/include/tensorflow/lite/interpreter.h"
 TFLITE_HDR_SYSTEM2="/opt/homebrew/include/tensorflow/lite/interpreter.h"
 TFLITE_HDR_SRC="$PROJECT_ROOT/src/tensorflow/tensorflow/lite/interpreter.h"
 
 if [ -f "$TFLITE_HDR_SYSTEM1" ]; then
-  TFLITE_HDR="$TFLITE_HDR_SYSTEM1"
+    TFLITE_HDR="$TFLITE_HDR_SYSTEM1"
+    echo "Found TensorFlow Lite headers in system location: $TFLITE_HDR"
 elif [ -f "$TFLITE_HDR_SYSTEM2" ]; then
-  TFLITE_HDR="$TFLITE_HDR_SYSTEM2"
+    TFLITE_HDR="$TFLITE_HDR_SYSTEM2"
+    echo "Found TensorFlow Lite headers in system location: $TFLITE_HDR"
 elif [ -f "$TFLITE_HDR_SRC" ]; then
-  TFLITE_HDR="$TFLITE_HDR_SRC"
+    TFLITE_HDR="$TFLITE_HDR_SRC"
+    echo "Found TensorFlow Lite headers in project directory: $TFLITE_HDR"
 else
-  echo "Error: TensorFlow Lite header not found (tensorflow/lite/interpreter.h)."
-  echo "       Possible locations to check:"
-  echo "         $TFLITE_HDR_SYSTEM1"
-  echo "         $TFLITE_HDR_SYSTEM2"
-  echo "         $TFLITE_HDR_SRC"
-  echo "       Build TFLite via Bazel and install or copy the headers accordingly."
-  exit 1
+    echo "Error: TensorFlow Lite header not found (tensorflow/lite/interpreter.h)."
+    echo "       Please run ./install.sh to install TensorFlow Lite, or"
+    echo "       build it manually and ensure it's in one of these locations:"
+    echo "         $TFLITE_HDR_SYSTEM1"
+    echo "         $TFLITE_HDR_SYSTEM2"
+    echo "         $TFLITE_HDR_SRC"
+    exit 1
 fi
-echo "TensorFlow Lite headers: found at $TFLITE_HDR"
 
-# 6b. Library checks
+# 6b. Library checks - check system locations first
 TFLITE_LIB_SYSTEM1="/usr/local/lib/libtensorflowlite.dylib"
 TFLITE_LIB_SYSTEM2="/opt/homebrew/lib/libtensorflowlite.dylib"
 TFLITE_LIB_SRC="$PROJECT_ROOT/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib"
 
 if [ -f "$TFLITE_LIB_SYSTEM1" ]; then
-  TFLITE_LIB="$TFLITE_LIB_SYSTEM1"
+    TFLITE_LIB="$TFLITE_LIB_SYSTEM1"
+    echo "Found TensorFlow Lite library in system location: $TFLITE_LIB"
 elif [ -f "$TFLITE_LIB_SYSTEM2" ]; then
-  TFLITE_LIB="$TFLITE_LIB_SYSTEM2"
+    TFLITE_LIB="$TFLITE_LIB_SYSTEM2"
+    echo "Found TensorFlow Lite library in system location: $TFLITE_LIB"
 elif [ -f "$TFLITE_LIB_SRC" ]; then
-  TFLITE_LIB="$TFLITE_LIB_SRC"
+    TFLITE_LIB="$TFLITE_LIB_SRC"
+    echo "Found TensorFlow Lite library in project directory: $TFLITE_LIB"
 else
-  echo "Error: libtensorflowlite.dylib not found."
-  echo "       Possible locations to check:"
-  echo "         $TFLITE_LIB_SYSTEM1"
-  echo "         $TFLITE_LIB_SYSTEM2"
-  echo "         $TFLITE_LIB_SRC"
-  echo "       Build the library via Bazel and place it in one of these paths."
-  exit 1
+    echo "Error: libtensorflowlite.dylib not found."
+    echo "       Please run ./install.sh to install TensorFlow Lite, or"
+    echo "       build it manually and ensure it's in one of these locations:"
+    echo "         $TFLITE_LIB_SYSTEM1"
+    echo "         $TFLITE_LIB_SYSTEM2"
+    echo "         $TFLITE_LIB_SRC"
+    exit 1
 fi
-echo "TensorFlow Lite library: found at $TFLITE_LIB"
 
 ###############################################################################
-# 7. Check for FlatBuffers headers (Bazel’s copy or Homebrew)
+# 7. Check for FlatBuffers headers (system locations first)
 ###############################################################################
 FLAT_HDR_SYSTEM1="/usr/local/include/flatbuffers/flatbuffers.h"
 FLAT_HDR_SYSTEM2="/opt/homebrew/include/flatbuffers/flatbuffers.h"
 FLAT_HDR_BAZEL_BIN="$PROJECT_ROOT/src/tensorflow/bazel-bin/external/flatbuffers/include/flatbuffers/flatbuffers.h"
 FLAT_HDR_BAZEL_OUT="$PROJECT_ROOT/src/tensorflow/bazel-out/darwin_arm64-opt/bin/external/flatbuffers/include/flatbuffers/flatbuffers.h"
 
-if [ -f "$FLAT_HDR_BAZEL_BIN" ]; then
-  FLAT_HDR="$FLAT_HDR_BAZEL_BIN"
-elif [ -f "$FLAT_HDR_BAZEL_OUT" ]; then
-  FLAT_HDR="$FLAT_HDR_BAZEL_OUT"
-elif [ -f "$FLAT_HDR_SYSTEM1" ]; then
-  FLAT_HDR="$FLAT_HDR_SYSTEM1"
+if [ -f "$FLAT_HDR_SYSTEM1" ]; then
+    FLAT_HDR="$FLAT_HDR_SYSTEM1"
+    echo "Found FlatBuffers headers in system location: $FLAT_HDR"
 elif [ -f "$FLAT_HDR_SYSTEM2" ]; then
-  FLAT_HDR="$FLAT_HDR_SYSTEM2"
+    FLAT_HDR="$FLAT_HDR_SYSTEM2"
+    echo "Found FlatBuffers headers in system location: $FLAT_HDR"
+elif [ -f "$FLAT_HDR_BAZEL_BIN" ]; then
+    FLAT_HDR="$FLAT_HDR_BAZEL_BIN"
+    echo "Found FlatBuffers headers in Bazel build: $FLAT_HDR"
+elif [ -f "$FLAT_HDR_BAZEL_OUT" ]; then
+    FLAT_HDR="$FLAT_HDR_BAZEL_OUT"
+    echo "Found FlatBuffers headers in Bazel build: $FLAT_HDR"
 else
-  echo "Error: FlatBuffers header not found (flatbuffers/flatbuffers.h)."
-  echo "       Possible locations to check:"
-  echo "         $FLAT_HDR_SYSTEM1"
-  echo "         $FLAT_HDR_SYSTEM2"
-  echo "         $FLAT_HDR_BAZEL_BIN"
-  echo "         $FLAT_HDR_BAZEL_OUT"
-  echo "       Install via Homebrew: brew install flatbuffers"
-  echo "       Or ensure Bazel’s FlatBuffers live under bazel-bin/external/flatbuffers."
-  exit 1
+    echo "Error: FlatBuffers header not found (flatbuffers/flatbuffers.h)."
+    echo "       Please run ./install.sh to install FlatBuffers, or"
+    echo "       install it manually and ensure it's in one of these locations:"
+    echo "         $FLAT_HDR_SYSTEM1"
+    echo "         $FLAT_HDR_SYSTEM2"
+    echo "         $FLAT_HDR_BAZEL_BIN"
+    echo "         $FLAT_HDR_BAZEL_OUT"
+    exit 1
 fi
-echo "FlatBuffers headers: found at $FLAT_HDR"
 
 ###############################################################################
 # 8. Create Symlinks for Versioned .dylib Files (if needed)
