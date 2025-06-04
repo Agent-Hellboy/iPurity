@@ -15,6 +15,11 @@ struct ScanStats {
 };
 
 // Scanner functions.
+// Declare process_image_file to match implementation in src/scanner.cpp
+void process_image_file(AfcClientPool* pool, const std::string& fullPath,
+                        ScanStats& stats, float threshold);
+
+// Directory scanning entry point.
 void scan_directory(AfcClientPool* pool, const char* path, ScanStats& stats,
                     float threshold);
 
