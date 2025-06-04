@@ -6,6 +6,8 @@
 #   - OpenCV (via pkg-config)
 #   - libimobiledevice (via a compile test)
 #   - libplist (via a compile test)
+#   - TensorFlow Lite headers & library (existence check)
+#   - FlatBuffers headers (existence check in Bazel output or Homebrew)
 #
 # Exits with an error if any dependency is missing.
 # Also creates unversioned symlinks for libimobiledevice/libplist if needed.
@@ -48,14 +50,13 @@ echo "OpenCV: found."
 ###############################################################################
 # 4. Check for libimobiledevice
 ###############################################################################
-# Many times, libimobiledevice doesn't ship a pkg-config file, so we do a compile test.
 TMPFILE=$(mktemp /tmp/check_imobile.XXXXXX.cpp)
 cat << EOF > "$TMPFILE"
 #include <libimobiledevice/libimobiledevice.h>
 int main() { return 0; }
 EOF
 
-# Attempt to compile it. For Apple Silicon, Homebrew is usually /opt/homebrew/include
+# Compile test (Homebrew on Apple Silicon typically lives under /opt/homebrew/include)
 if ! g++ -I/opt/homebrew/include -c "$TMPFILE" -o /dev/null 2>/dev/null; then
   echo "Error: Could not compile a test program with libimobiledevice."
   echo "       Make sure libimobiledevice is installed: brew install libimobiledevice"
@@ -68,7 +69,6 @@ echo "libimobiledevice: found."
 ###############################################################################
 # 5. Check for libplist
 ###############################################################################
-# We'll do a similar compile test. The main header is <plist/plist.h>.
 TMPFILE=$(mktemp /tmp/check_plist.XXXXXX.cpp)
 cat << EOF > "$TMPFILE"
 #include <plist/plist.h>
@@ -89,7 +89,91 @@ rm -f "$TMPFILE"
 echo "libplist: found."
 
 ###############################################################################
-# 6. Create Symlinks for Versioned .dylib Files (if needed)
+# 6. Check for TensorFlow Lite headers & library
+###############################################################################
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# 6a. Header checks - check system locations first
+TFLITE_HDR_SYSTEM1="/usr/local/include/tensorflow/lite/interpreter.h"
+TFLITE_HDR_SYSTEM2="/opt/homebrew/include/tensorflow/lite/interpreter.h"
+TFLITE_HDR_SRC="$PROJECT_ROOT/src/tensorflow/tensorflow/lite/interpreter.h"
+
+if [ -f "$TFLITE_HDR_SYSTEM1" ]; then
+    TFLITE_HDR="$TFLITE_HDR_SYSTEM1"
+    echo "Found TensorFlow Lite headers in system location: $TFLITE_HDR"
+elif [ -f "$TFLITE_HDR_SYSTEM2" ]; then
+    TFLITE_HDR="$TFLITE_HDR_SYSTEM2"
+    echo "Found TensorFlow Lite headers in system location: $TFLITE_HDR"
+elif [ -f "$TFLITE_HDR_SRC" ]; then
+    TFLITE_HDR="$TFLITE_HDR_SRC"
+    echo "Found TensorFlow Lite headers in project directory: $TFLITE_HDR"
+else
+    echo "Error: TensorFlow Lite header not found (tensorflow/lite/interpreter.h)."
+    echo "       Please run ./install.sh to install TensorFlow Lite, or"
+    echo "       build it manually and ensure it's in one of these locations:"
+    echo "         $TFLITE_HDR_SYSTEM1"
+    echo "         $TFLITE_HDR_SYSTEM2"
+    echo "         $TFLITE_HDR_SRC"
+    exit 1
+fi
+
+# 6b. Library checks - check system locations first
+TFLITE_LIB_SYSTEM1="/usr/local/lib/libtensorflowlite.dylib"
+TFLITE_LIB_SYSTEM2="/opt/homebrew/lib/libtensorflowlite.dylib"
+TFLITE_LIB_SRC="$PROJECT_ROOT/src/tensorflow/bazel-bin/tensorflow/lite/libtensorflowlite.dylib"
+
+if [ -f "$TFLITE_LIB_SYSTEM1" ]; then
+    TFLITE_LIB="$TFLITE_LIB_SYSTEM1"
+    echo "Found TensorFlow Lite library in system location: $TFLITE_LIB"
+elif [ -f "$TFLITE_LIB_SYSTEM2" ]; then
+    TFLITE_LIB="$TFLITE_LIB_SYSTEM2"
+    echo "Found TensorFlow Lite library in system location: $TFLITE_LIB"
+elif [ -f "$TFLITE_LIB_SRC" ]; then
+    TFLITE_LIB="$TFLITE_LIB_SRC"
+    echo "Found TensorFlow Lite library in project directory: $TFLITE_LIB"
+else
+    echo "Error: libtensorflowlite.dylib not found."
+    echo "       Please run ./install.sh to install TensorFlow Lite, or"
+    echo "       build it manually and ensure it's in one of these locations:"
+    echo "         $TFLITE_LIB_SYSTEM1"
+    echo "         $TFLITE_LIB_SYSTEM2"
+    echo "         $TFLITE_LIB_SRC"
+    exit 1
+fi
+
+###############################################################################
+# 7. Check for FlatBuffers headers (system locations first)
+###############################################################################
+FLAT_HDR_SYSTEM1="/usr/local/include/flatbuffers/flatbuffers.h"
+FLAT_HDR_SYSTEM2="/opt/homebrew/include/flatbuffers/flatbuffers.h"
+FLAT_HDR_BAZEL_BIN="$PROJECT_ROOT/src/tensorflow/bazel-bin/external/flatbuffers/include/flatbuffers/flatbuffers.h"
+FLAT_HDR_BAZEL_OUT="$PROJECT_ROOT/src/tensorflow/bazel-out/darwin_arm64-opt/bin/external/flatbuffers/include/flatbuffers/flatbuffers.h"
+
+if [ -f "$FLAT_HDR_SYSTEM1" ]; then
+    FLAT_HDR="$FLAT_HDR_SYSTEM1"
+    echo "Found FlatBuffers headers in system location: $FLAT_HDR"
+elif [ -f "$FLAT_HDR_SYSTEM2" ]; then
+    FLAT_HDR="$FLAT_HDR_SYSTEM2"
+    echo "Found FlatBuffers headers in system location: $FLAT_HDR"
+elif [ -f "$FLAT_HDR_BAZEL_BIN" ]; then
+    FLAT_HDR="$FLAT_HDR_BAZEL_BIN"
+    echo "Found FlatBuffers headers in Bazel build: $FLAT_HDR"
+elif [ -f "$FLAT_HDR_BAZEL_OUT" ]; then
+    FLAT_HDR="$FLAT_HDR_BAZEL_OUT"
+    echo "Found FlatBuffers headers in Bazel build: $FLAT_HDR"
+else
+    echo "Error: FlatBuffers header not found (flatbuffers/flatbuffers.h)."
+    echo "       Please run ./install.sh to install FlatBuffers, or"
+    echo "       install it manually and ensure it's in one of these locations:"
+    echo "         $FLAT_HDR_SYSTEM1"
+    echo "         $FLAT_HDR_SYSTEM2"
+    echo "         $FLAT_HDR_BAZEL_BIN"
+    echo "         $FLAT_HDR_BAZEL_OUT"
+    exit 1
+fi
+
+###############################################################################
+# 8. Create Symlinks for Versioned .dylib Files (if needed)
 ###############################################################################
 SYMLINK_DIR="/opt/homebrew/lib"
 
@@ -98,21 +182,21 @@ if [ -d "$SYMLINK_DIR" ]; then
 
   pushd "$SYMLINK_DIR" >/dev/null || exit 1
 
-  # Symlink for libimobiledevice (e.g. libimobiledevice-1.0.dylib → libimobiledevice.dylib)
+  # Symlink for libimobiledevice
   IMOBILE=$(ls libimobiledevice-*.dylib 2>/dev/null | head -n 1)
   if [[ -n "$IMOBILE" ]]; then
     echo "Found $IMOBILE. Creating symlink libimobiledevice.dylib → $IMOBILE"
     ln -sf "$IMOBILE" libimobiledevice.dylib
   fi
 
-  # Symlink for libplist (non-++), e.g. libplist-2.0.dylib → libplist.dylib
+  # Symlink for libplist
   PLIST=$(ls libplist-*.dylib 2>/dev/null | grep -v '++' | head -n 1)
   if [[ -n "$PLIST" ]]; then
     echo "Found $PLIST. Creating symlink libplist.dylib → $PLIST"
     ln -sf "$PLIST" libplist.dylib
   fi
 
-  # Symlink for libplist++ (C++ version), e.g. libplist++-2.0.dylib → libplist++.dylib
+  # Symlink for libplist++
   PLISTPP=$(ls libplist++-*.dylib 2>/dev/null | head -n 1)
   if [[ -n "$PLISTPP" ]]; then
     echo "Found $PLISTPP. Creating symlink libplist++.dylib → $PLISTPP"
@@ -123,9 +207,11 @@ if [ -d "$SYMLINK_DIR" ]; then
 fi
 
 ###############################################################################
-# 7. Success
+# 9. Success
 ###############################################################################
 echo "All checks passed for Apple Silicon macOS."
-echo "Unversioned symlinks created (if needed)."
-echo "You can now run 'make' or 'make all'."
+echo "TensorFlow Lite include path: $TFLITE_HDR"
+echo "TensorFlow Lite library path: $TFLITE_LIB"
+echo "FlatBuffers header path: $FLAT_HDR"
+echo "You can now run 'make' or proceed with CMake + build as usual."
 exit 0

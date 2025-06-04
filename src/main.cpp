@@ -22,7 +22,14 @@ int main(int argc, char* argv[]) {
         std::cout << "----------------------" << std::endl;
     }
 
-    float threshold = DEFAULT_SKIN_THRESHOLD;
+    // Initialize NSFW detector
+    NSFWDetector detector;
+    if (!detector.initialize("models/nsfw_model.tflite")) {
+        std::cerr << "Failed to initialize NSFW detector" << std::endl;
+        return 1;
+    }
+
+    float threshold = 0.5f; // Default threshold for NSFW detection
     if (argc > 1) {
         threshold = std::stof(argv[1]);
         if (threshold < 0.0 || threshold > 1.0) {
@@ -52,7 +59,7 @@ int main(int argc, char* argv[]) {
     }
 
     ScanStats stats;
-    scan_directory(&clientPool, "/DCIM", stats, threshold);
+    scan_directory(&clientPool, "/DCIM", stats, threshold, &detector);
 
     // Wait for all asynchronous tasks to complete.
     for (auto& fut : futures) {

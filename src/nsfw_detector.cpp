@@ -1,55 +1,134 @@
 #include "nsfw_detector.h"
-
-#include <iostream>
 #include <opencv2/opencv.hpp>
+#include <iostream>
+#include <fstream>
+#include <filesystem>
 #include <string>
 
-/**
- * Check if a pixel (in YCrCb) is within a naive "skin" range.
- * This function assumes the pixel is in [Y, Cr, Cb] order.
- */
-static bool isSkinPixel(const cv::Vec3b& ycrcb) {
-    uchar Cr = ycrcb[1];
-    uchar Cb = ycrcb[2];
+namespace fs = std::filesystem;
 
-    // Example naive thresholds for skin detection:
-    //   140 < Cr < 175
-    //   100 < Cb < 135
-    if (Cr >= 140 && Cr <= 175 && Cb >= 100 && Cb <= 135) {
-        return true;
-    }
-    return false;
+NSFWDetector::NSFWDetector() : isInitialized(false) {}
+
+NSFWDetector::~NSFWDetector() {
+    // Cleanup resources
+    interpreter.reset();
+    model.reset();
 }
 
-bool naiveNSFWCheck(const std::string& imagePath, float skinThreshold) {
-    // 1. Load the image in BGR format
-    cv::Mat imgBGR = cv::imread(imagePath, cv::IMREAD_COLOR);
-    if (imgBGR.empty()) {
-        std::cerr << "Could not load image: " << imagePath << std::endl;
-        return false;
+std::string find_model_path() {
+    // Try Homebrew's share directory first
+    std::string homebrew_share = "/usr/local/share/ipurity/nsfw_model.tflite";
+    if (fs::exists(homebrew_share)) {
+        return homebrew_share;
     }
 
-    // 2. Convert to YCrCb
-    cv::Mat imgYCrCb;
-    cv::cvtColor(imgBGR, imgYCrCb, cv::COLOR_BGR2YCrCb);
+    // Try Apple Silicon Homebrew location
+    homebrew_share = "/opt/homebrew/share/ipurity/nsfw_model.tflite";
+    if (fs::exists(homebrew_share)) {
+        return homebrew_share;
+    }
 
-    // 3. Count how many pixels fall in "skin" range
-    long totalPixels = static_cast<long>(imgYCrCb.rows) * imgYCrCb.cols;
-    long skinCount = 0;
-
-    for (int y = 0; y < imgYCrCb.rows; y++) {
-        const cv::Vec3b* rowPtr = imgYCrCb.ptr<cv::Vec3b>(y);
-        for (int x = 0; x < imgYCrCb.cols; x++) {
-            if (isSkinPixel(rowPtr[x])) {
-                skinCount++;
-            }
+    // Try user's home directory
+    const char* home = getenv("HOME");
+    if (home) {
+        std::string user_model = std::string(home) + "/ipurity/models/nsfw_model.tflite";
+        if (fs::exists(user_model)) {
+            return user_model;
         }
     }
 
-    // 4. Compute ratio of skin pixels
-    float ratio =
-        static_cast<float>(skinCount) / static_cast<float>(totalPixels);
-
-    // 5. Return true if ratio >= threshold
-    return (ratio >= skinThreshold);
+    // Fall back to local models directory for development
+    return "models/nsfw_model.tflite";
 }
+
+bool NSFWDetector::initialize(const std::string& model_path) {
+    std::string actual_path = model_path.empty() ? find_model_path() : model_path;
+    
+    if (!fs::exists(actual_path)) {
+        std::cerr << "Error: Model file not found at " << actual_path << std::endl;
+        std::cerr << "Please ensure the model is installed in one of these locations:" << std::endl;
+        std::cerr << "  - /usr/local/share/ipurity/nsfw_model.tflite" << std::endl;
+        std::cerr << "  - /opt/homebrew/share/ipurity/nsfw_model.tflite" << std::endl;
+        std::cerr << "  - ~/ipurity/models/nsfw_model.tflite" << std::endl;
+        std::cerr << "  - ./models/nsfw_model.tflite" << std::endl;
+        return false;
+    }
+
+    // Load the TensorFlow Lite model
+    model = tflite::FlatBufferModel::BuildFromFile(actual_path.c_str());
+    if (!model) {
+        std::cerr << "Failed to load model: " << actual_path << std::endl;
+        return false;
+    }
+
+    // Build the interpreter
+    tflite::ops::builtin::BuiltinOpResolver resolver;
+    tflite::InterpreterBuilder builder(*model, resolver);
+    builder(&interpreter);
+    
+    if (!interpreter) {
+        std::cerr << "Failed to build interpreter" << std::endl;
+        return false;
+    }
+
+    // Allocate tensors
+    if (interpreter->AllocateTensors() != kTfLiteOk) {
+        std::cerr << "Failed to allocate tensors" << std::endl;
+        return false;
+    }
+
+    isInitialized = true;
+    return true;
+}
+
+bool NSFWDetector::preprocessImage(const cv::Mat& input, float* output) {
+    cv::Mat resized;
+    cv::resize(input, resized, cv::Size(INPUT_SIZE, INPUT_SIZE));
+    
+    // Convert to RGB and normalize
+    cv::Mat rgb;
+    cv::cvtColor(resized, rgb, cv::COLOR_BGR2RGB);
+    rgb.convertTo(rgb, CV_32FC3, 1.0/255.0);
+    
+    // Copy data to input tensor
+    float* input_tensor = interpreter->typed_input_tensor<float>(0);
+    for (int y = 0; y < INPUT_SIZE; y++) {
+        for (int x = 0; x < INPUT_SIZE; x++) {
+            cv::Vec3f pixel = rgb.at<cv::Vec3f>(y, x);
+            *input_tensor++ = pixel[0];
+            *input_tensor++ = pixel[1];
+            *input_tensor++ = pixel[2];
+        }
+    }
+    
+    return true;
+}
+
+float NSFWDetector::detectNSFW(const cv::Mat& image) {
+    if (!isInitialized) {
+        std::cerr << "Detector not initialized" << std::endl;
+        return -1.0f;
+    }
+
+    if (image.empty()) {
+        std::cerr << "Input image is empty" << std::endl;
+        return -1.0f;
+    }
+
+    // Preprocess image
+    float* input = interpreter->typed_input_tensor<float>(0);
+    if (!preprocessImage(image, input)) {
+        return -1.0f;
+    }
+
+    // Run inference
+    if (interpreter->Invoke() != kTfLiteOk) {
+        std::cerr << "Failed to run inference" << std::endl;
+        return -1.0f;
+    }
+
+    // Get output
+    float* output = interpreter->typed_output_tensor<float>(0);
+    return output[1]; // Assuming output[1] is the NSFW probability
+}
+
