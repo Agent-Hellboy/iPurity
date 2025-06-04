@@ -185,7 +185,7 @@ add_custom_target(check
 )
 add_custom_target(dist
     COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_SOURCE_DIR}/dist
-    COMMAND ${CMAKE_COMMAND} -E chdir ${PROJECT_SOURCE_DIR} /usr/bin/tar -czf dist/iPurity.tar.gz CMakeLists.txt LICENSE README.md configure include src
+    COMMAND ${CMAKE_COMMAND} -E chdir ${PROJECT_SOURCE_DIR} /usr/bin/tar -czf dist/iPurity.tar.gz CMakeLists.txt LICENSE README.md configure install.sh include src models
     COMMENT "Creating distribution tarball..."
 )
 install(TARGETS iPurity RUNTIME DESTINATION bin)

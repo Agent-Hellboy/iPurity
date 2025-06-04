@@ -2,6 +2,10 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <fstream>
+#include <filesystem>
+#include <string>
+
+namespace fs = std::filesystem;
 
 NSFWDetector::NSFWDetector() : isInitialized(false) {}
 
@@ -11,11 +15,49 @@ NSFWDetector::~NSFWDetector() {
     model.reset();
 }
 
-bool NSFWDetector::initialize(const std::string& modelPath) {
+std::string find_model_path() {
+    // Try Homebrew's share directory first
+    std::string homebrew_share = "/usr/local/share/ipurity/nsfw_model.tflite";
+    if (fs::exists(homebrew_share)) {
+        return homebrew_share;
+    }
+
+    // Try Apple Silicon Homebrew location
+    homebrew_share = "/opt/homebrew/share/ipurity/nsfw_model.tflite";
+    if (fs::exists(homebrew_share)) {
+        return homebrew_share;
+    }
+
+    // Try user's home directory
+    const char* home = getenv("HOME");
+    if (home) {
+        std::string user_model = std::string(home) + "/ipurity/models/nsfw_model.tflite";
+        if (fs::exists(user_model)) {
+            return user_model;
+        }
+    }
+
+    // Fall back to local models directory for development
+    return "models/nsfw_model.tflite";
+}
+
+bool NSFWDetector::initialize(const std::string& model_path) {
+    std::string actual_path = model_path.empty() ? find_model_path() : model_path;
+    
+    if (!fs::exists(actual_path)) {
+        std::cerr << "Error: Model file not found at " << actual_path << std::endl;
+        std::cerr << "Please ensure the model is installed in one of these locations:" << std::endl;
+        std::cerr << "  - /usr/local/share/ipurity/nsfw_model.tflite" << std::endl;
+        std::cerr << "  - /opt/homebrew/share/ipurity/nsfw_model.tflite" << std::endl;
+        std::cerr << "  - ~/ipurity/models/nsfw_model.tflite" << std::endl;
+        std::cerr << "  - ./models/nsfw_model.tflite" << std::endl;
+        return false;
+    }
+
     // Load the TensorFlow Lite model
-    model = tflite::FlatBufferModel::BuildFromFile(modelPath.c_str());
+    model = tflite::FlatBufferModel::BuildFromFile(actual_path.c_str());
     if (!model) {
-        std::cerr << "Failed to load model: " << modelPath << std::endl;
+        std::cerr << "Failed to load model: " << actual_path << std::endl;
         return false;
     }
 
@@ -90,19 +132,3 @@ float NSFWDetector::detectNSFW(const cv::Mat& image) {
     return output[1]; // Assuming output[1] is the NSFW probability
 }
 
-/**
- * Check if a pixel (in YCrCb) is within a naive "skin" range.
- * This function assumes the pixel is in [Y, Cr, Cb] order.
- */
-static bool isSkinPixel(const cv::Vec3b& ycrcb) {
-    uchar Cr = ycrcb[1];
-    uchar Cb = ycrcb[2];
-
-    // Example naive thresholds for skin detection:
-    //   140 < Cr < 175
-    //   100 < Cb < 135
-    if (Cr >= 140 && Cr <= 175 && Cb >= 100 && Cb <= 135) {
-        return true;
-    }
-    return false;
-}
