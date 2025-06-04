@@ -1,3 +1,5 @@
+#include "scanner.h"
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -5,7 +7,6 @@
 #include <iostream>
 #include <mutex>
 
-#include "scanner.h"
 #include "afc_helpers.h"
 #include "nsfw_detector.h"
 
@@ -56,7 +57,7 @@ bool download_file(afc_client_t afc, const char* remotePath,
     return true;
 }
 
-void process_image_file(AfcClientPool* pool, const char* fullPath,
+void process_image_file(AfcClientPool* pool, const std::string& fullPath,
                         ScanStats& stats, float threshold) {
     std::string filePathStr(fullPath);
     if (!is_image_file(filePathStr)) return;
@@ -74,7 +75,7 @@ void process_image_file(AfcClientPool* pool, const char* fullPath,
         "/tmp/ios_" + filePathStr.substr(filePathStr.find_last_of("/") + 1);
 
     afc_client_t client = pool->acquire();
-    if (download_file(client, fullPath, localFile.c_str())) {
+    if (download_file(client, fullPath.c_str(), localFile.c_str())) {
         bool isNSFW = naiveNSFWCheck(localFile, threshold);
         std::string message;
         {
@@ -116,20 +117,21 @@ void scan_directory(AfcClientPool* pool, const char* path, ScanStats& stats,
         const char* entry = dirList[i];
         if (strcmp(entry, ".") == 0 || strcmp(entry, "..") == 0) continue;
 
-        char* fullPath = build_full_path(path, entry);
+        char* fullPathC = build_full_path(path, entry);
+        std::string fullPath(fullPathC);
 
         client = pool->acquire();
-        bool isDir = is_directory(client, fullPath);
+        bool isDir = is_directory(client, fullPathC);
         pool->release(client);
 
         if (isDir) {
-            scan_directory(pool, fullPath, stats, threshold);
+            scan_directory(pool, fullPath.c_str(), stats, threshold);
         } else {
             futures.push_back(std::async(std::launch::async, process_image_file,
                                          pool, fullPath, std::ref(stats),
                                          threshold));
         }
-        free(fullPath);
+        free(fullPathC);
     }
     afc_dictionary_free(dirList);
 }
